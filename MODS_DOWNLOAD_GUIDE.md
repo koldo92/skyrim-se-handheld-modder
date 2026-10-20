@@ -1,7 +1,7 @@
 # Skyrim Special Edition: Handheld 10W / 60 FPS Modding Guide
-**Device**: Lenovo Legion Go S (AMD Ryzen Z1 Extreme, 32GB RAM, 120Hz Screen, SteamOS)  
+**Target Devices**: Lenovo Legion Go / Go S, Steam Deck (LCD/OLED), ASUS ROG Ally (SteamOS / Bazzite)  
 **Game Version**: Fresh Skyrim SE from Steam (v1.6.1170, Non-AE / No Paid DLCs)  
-**Target Performance**: Locked 60 FPS @ 10W TDP (~4+ hours battery life, quiet fans)
+**Target Performance**: Locked 60 FPS @ 10W TDP (~3.0 – 4.0+ hours battery life, quiet fans)
 
 ---
 
@@ -14,7 +14,8 @@
    * Switch to Desktop Mode.
    * Open a terminal in this directory and run:
      ```bash
-     ./setup_legion_skyrim.sh
+     ./setup_handheld_skyrim.sh
+     # (or ./setup_legion_skyrim.sh)
      ```
    * This configures your low-TDP INIs, verifies paths, installs SKSE64, and prompts to set up Mod Organizer 2 via the Linux installer.
 3. **Step 2: Download the Mod Archives**
@@ -34,7 +35,9 @@
 ## Mod Download List (All Non-AE Compatible)
 
 > [!IMPORTANT]
-> When downloading from Nexus, always choose files marked for **Skyrim SE 1.6.1170 / Anniversary Edition (Free update)**. None of these mods require the paid Anniversary Edition DLC upgrade.
+> **Stick to Main Files Only**:
+> * When downloading from Nexus, choose files built for **Skyrim SE 1.6.1170 / Anniversary Edition (Free update)**. None of these mods require the paid Anniversary Edition DLC upgrade.
+> * **Do NOT download Optional Files marked "Creation Club Patch" or "CC Addon"** (e.g., on *Mysticism*, *Adamant*, or *Lightened Skyrim*). Those optional patches look for the paid DLCs and will cause missing master errors. Always stick to the **Main Files**.
 
 ### 1. Core Engine & Performance (The 10W Lock)
 
@@ -79,7 +82,7 @@
 | **SmoothCam** | [Nexus #41636](https://www.nexusmods.com/skyrimspecialedition/mods/41636) | Main File |
 | **Galaduz's SmoothCam Preset** | [Nexus #72014](https://www.nexusmods.com/skyrimspecialedition/mods/72014) | Main File *(Handheld over-the-shoulder responsive camera)* |
 | **Precision** | [Nexus #72347](https://www.nexusmods.com/skyrimspecialedition/mods/72347) | Main File *(Physical weapon hitboxes, hit-stop recoil)* |
-| **Valhalla Combat** | [Nexus #64741](https://www.nexusmods.com/skyrimspecialedition/mods/64741) | Main File *(Timed parrying, poise meter, execution finishers)* |
+| **Valhalla Combat** | [Nexus #64741](https://www.nexusmods.com/skyrimspecialedition/mods/64741) | Main File *(Timed parries, poise meter, executions. In-game MCM Tip: under the Stamina tab, you can toggle whether Valhalla or Blade & Blunt controls your stamina)* |
 | **Mortal Enemies SE** | [Nexus #4881](https://www.nexusmods.com/skyrimspecialedition/mods/4881) | Main File *(Removes enemy aimbot tracking mid-attack)* |
 | **Simple Dual Sheath** | [Nexus #49710](https://www.nexusmods.com/skyrimspecialedition/mods/49710) | Main File *(Shields on back, visible secondary weapons)* |
 
@@ -126,4 +129,4 @@ To ensure your Legion Go S stays locked at **60 FPS** at **10W TDP**:
    * Set resolution to **1280x800** (or **1440x900**). SteamOS FSR will upscale it to full native resolution cleanly.
    * Turn Godrays to **Low/Off**.
 3. **Enjoy Skyrim**:
-   * You get full modern third-person combat (Valhalla parries, Precision weapon physics, TDM lock-on), a clean handheld UI, and over 4 hours of battery life on a single charge!
+   * You get full modern third-person combat (Valhalla parries, Precision weapon physics, TDM lock-on), a clean handheld UI, and ~3.0 to 4.0+ hours of battery life on a single charge!
