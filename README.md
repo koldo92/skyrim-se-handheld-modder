@@ -5,9 +5,12 @@
 [![Target Performance](https://img.shields.io/badge/Target-60%20FPS%20%40%2010W%20TDP-orange.svg)](#)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-An automated, battery-optimized modding toolkit for **The Elder Scrolls V: Skyrim Special Edition** running on Linux handhelds (**Lenovo Legion Go / Go S**, **Steam Deck LCD/OLED**, and **ASUS ROG Ally** via SteamOS or Bazzite).
+An automated, battery-optimized modding toolkit for **The Elder Scrolls V: Skyrim Special Edition (Steam Version)** running on Linux handhelds (**Lenovo Legion Go / Go S**, **Steam Deck LCD/OLED**, and **ASUS ROG Ally** via SteamOS or Bazzite).
 
 Delivers a **Tuxborn-like modernized action-RPG experience** without requiring the paid Anniversary Edition upgrade, without needing a second Windows PC, and without running complex external animation behavior compilers.
+
+> [!IMPORTANT]
+> **Steam Edition Required**: This toolkit is engineered specifically for the official **Steam version** of Skyrim Special Edition (AppID `489830`, runtime `1.6.1170`). The **GOG**, **Epic Games**, and **Xbox / Microsoft Store** editions are **not** supported out of the box by this automation.
 
 ---
 
@@ -107,6 +110,11 @@ Return to SteamOS **Game Mode** and launch Skyrim Special Edition!
 ---
 
 ## 🛠️ Troubleshooting & FAQ
+
+#### Q: Does this work with the GOG, Epic Games, or Game Pass editions?
+**No.** 
+* **GOG**: Uses a different executable version (`1.6.1179`) with different memory offsets. It requires GOG-specific builds of SKSE and Address Library, and installs to custom Heroic/Lutris prefixes rather than Steam's `compatdata/489830`.
+* **Epic Games & PC Game Pass**: These versions have DRM-locked executables that cannot load SKSE64 or native DLL plugins.
 
 #### Q: Do I need Nexus Premium?
 **No.** All mods can be downloaded with a standard free Nexus account. `deploy_mods.py` takes the raw archives from your `~/Downloads` folder and handles the extraction, folder restructuring, and load ordering for you.
