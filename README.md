@@ -46,7 +46,7 @@ This repository provides:
 1. Switch to **Desktop Mode**.
 2. Clone this repository or download the scripts:
    ```bash
-   git clone https://github.com/YOUR_USERNAME/skyrim-se-handheld-modder.git
+   git clone https://github.com/koldo92/skyrim-se-handheld-modder.git
    cd skyrim-se-handheld-modder
    chmod +x setup_handheld_skyrim.sh deploy_mods.py
    ```
