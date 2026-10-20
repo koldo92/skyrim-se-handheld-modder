@@ -22,7 +22,7 @@ Furthermore, running Wabbajack natively on SteamOS is notoriously difficult, usu
 
 This repository provides:
 1. **Zero Paid AE Requirement**: Built specifically for standard Skyrim SE (Steam version `1.6.1170`).
-2. **Locked 60 FPS @ 10W APU TDP**: Delivers **3.5 to 4.5+ hours of battery life** with whisper-quiet fans on Z1 Extreme / Van Gogh APUs.
+2. **Locked 60 FPS @ 10W APU TDP**: Delivers **~3.0 to 4.0+ hours of battery life** (up to 4.5+ on OLED / Ally X) with whisper-quiet fans on Z1 Extreme / Van Gogh APUs.
 3. **No Windows PC Required**: Perform the entire installation on-device in Desktop Mode.
 4. **No External Behavior Tools (No MCO / Nemesis)**: Uses 100% native SKSE C++ DLLs for modern combat (*Valhalla Combat* + *Precision* + *True Directional Movement*), eliminating Proton crash risks associated with Java/.NET animation generators.
 5. **One-Command Auto-Staging**: Download mod archives into `~/Downloads`, run `deploy_mods.py`, and your Mod Organizer 2 profile, plugins, load order, and low-TDP INIs are configured automatically.
