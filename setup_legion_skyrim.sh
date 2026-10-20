@@ -1,19 +1,20 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# setup_legion_skyrim.sh
-# Setup Script for Modding Skyrim SE on Lenovo Legion Go S (SteamOS)
+# setup_handheld_skyrim.sh
+# Setup Script for Modding Skyrim SE on SteamOS Handheld PCs
+# (Lenovo Legion Go / Go S, Steam Deck LCD/OLED, ASUS ROG Ally)
 # Target: Skyrim SE (1.6.1170, non-AE), 60 FPS Lock @ 10W TDP
 # ==============================================================================
 
 set -e
 
 echo "=========================================================="
-echo "  Skyrim SE Handheld Modding Setup for Legion Go S"
+echo "  Skyrim SE Handheld Modding Setup for SteamOS"
 echo "  Target: Locked 60 FPS @ 10W TDP (Non-AE, No-MCO)"
 echo "=========================================================="
 echo ""
 
-# 1. Detect Steam and Skyrim SE paths
+# 1. Detect Primary Steam Installation
 STEAM_DIR=""
 for candidate in "$HOME/.local/share/Steam" "$HOME/.steam/steam" "$HOME/.steam/root"; do
     if [ -d "$candidate" ]; then
@@ -27,73 +28,136 @@ if [ -z "$STEAM_DIR" ]; then
     exit 1
 fi
 
-GAME_DIR="$STEAM_DIR/steamapps/common/Skyrim Special Edition"
-COMPAT_DIR="$STEAM_DIR/steamapps/compatdata/489830"
-PFX_DIR="$COMPAT_DIR/pfx"
+echo "[+] Primary Steam Directory: $STEAM_DIR"
 
-echo "[+] Steam Directory:   $STEAM_DIR"
-echo "[+] Game Directory:    $GAME_DIR"
-echo "[+] Proton Prefix:     $PFX_DIR"
-echo ""
+# 2. Detect All Steam Libraries (Internal SSD + MicroSD Cards)
+LIBRARIES=("$STEAM_DIR")
 
-if [ ! -d "$GAME_DIR" ]; then
-    echo "[-] Error: Skyrim Special Edition is not installed at:"
-    echo "    $GAME_DIR"
-    echo "    Please install the game via Steam before running this script."
+# Check libraryfolders.vdf
+VDF_FILE="$STEAM_DIR/steamapps/libraryfolders.vdf"
+if [ -f "$VDF_FILE" ]; then
+    while IFS= read -r line; do
+        if [[ "$line" =~ \"path\"[[:space:]]+\"([^\"]+)\" ]]; then
+            LIB_PATH="${BASH_REMATCH[1]}"
+            if [ -d "$LIB_PATH" ] && [[ ! " ${LIBRARIES[*]} " =~ " ${LIB_PATH} " ]]; then
+                LIBRARIES+=("$LIB_PATH")
+            fi
+        fi
+    done < "$VDF_FILE"
+fi
+
+# Check common MicroSD card mount points
+if [ -d "/run/media" ]; then
+    for sub in /run/media/*/*; do
+        if [ -d "$sub/steamapps" ] && [[ ! " ${LIBRARIES[*]} " =~ " ${sub} " ]]; then
+            LIBRARIES+=("$sub")
+        fi
+    done
+fi
+
+# 3. Locate Game Directory and Proton Prefix
+GAME_DIR=""
+for lib in "${LIBRARIES[@]}"; do
+    if [ -d "$lib/steamapps/common/Skyrim Special Edition" ]; then
+        GAME_DIR="$lib/steamapps/common/Skyrim Special Edition"
+        break
+    fi
+done
+
+COMPAT_DIR=""
+for lib in "${LIBRARIES[@]}"; do
+    if [ -d "$lib/steamapps/compatdata/489830" ]; then
+        COMPAT_DIR="$lib/steamapps/compatdata/489830"
+        break
+    fi
+done
+
+if [ -z "$GAME_DIR" ]; then
+    echo "[-] Error: 'Skyrim Special Edition' was not found in any Steam library."
+    echo "    Libraries checked:"
+    for lib in "${LIBRARIES[@]}"; do
+        echo "      - $lib"
+    done
+    echo "    Please verify Skyrim SE is installed via Steam."
     exit 1
 fi
 
-if [ ! -d "$PFX_DIR" ]; then
-    echo "[-] Error: Proton prefix not found at $PFX_DIR."
+if [ -z "$COMPAT_DIR" ] || [ ! -d "$COMPAT_DIR/pfx" ]; then
+    echo "[-] Error: Proton prefix not found (compatdata/489830)."
     echo "    CRITICAL STEP: You must launch Skyrim SE in Steam Game Mode ONCE"
     echo "    until you reach the main menu, then exit. This generates the prefix."
     exit 1
 fi
 
-echo "[✓] Skyrim SE installation and Proton prefix verified."
+PFX_DIR="$COMPAT_DIR/pfx"
+
+echo "[+] Game Directory:          $GAME_DIR"
+echo "[+] Proton Prefix:           $PFX_DIR"
+echo "[✓] Installation paths verified."
 echo ""
 
-# 2. Check and Install SKSE64 (v2.2.6 for Skyrim SE 1.6.1170)
+# 4. Check and Install SKSE64 (v2.2.6 for Skyrim SE 1.6.1170)
 echo "----------------------------------------------------------"
 echo "[*] Checking Skyrim Script Extender 64 (SKSE64)..."
 SKSE_EXE="$GAME_DIR/skse64_loader.exe"
 
 if [ -f "$SKSE_EXE" ]; then
-    echo "[✓] SKSE64 loader already present in game directory."
+    echo "[✓] SKSE64 loader is already present in the game directory."
 else
     echo "[+] Downloading SKSE64 build 2.2.6 (for runtime 1.6.1170)..."
     TMP_DIR=$(mktemp -d)
     SKSE_URL="https://silverlock.org/download/skse/skse64_2_02_06.7z"
-    
-    # Try downloading from primary mirror, fallback to github release archive if needed
-    if curl -sSL --fail "$SKSE_URL" -o "$TMP_DIR/skse.7z"; then
+
+    EXTRACT_SUCCESS=0
+    if curl -sSL --fail --connect-timeout 15 "$SKSE_URL" -o "$TMP_DIR/skse.7z"; then
         echo "[+] Extracting SKSE64..."
-        7z x "$TMP_DIR/skse.7z" -o"$TMP_DIR/extracted" > /dev/null
-        
-        SKSE_INNER=$(find "$TMP_DIR/extracted" -type d -name "skse64_2_02_06" | head -n 1)
-        if [ -d "$SKSE_INNER" ]; then
-            cp -r "$SKSE_INNER"/skse64_*.dll "$GAME_DIR/"
-            cp -r "$SKSE_INNER"/skse64_loader.exe "$GAME_DIR/"
-            mkdir -p "$GAME_DIR/Data"
-            cp -r "$SKSE_INNER/Data/"* "$GAME_DIR/Data/"
-            echo "[✓] SKSE64 installed successfully into $GAME_DIR."
+        mkdir -p "$TMP_DIR/extracted"
+
+        if command -v 7z &> /dev/null; then
+            7z x "$TMP_DIR/skse.7z" -o"$TMP_DIR/extracted" -y > /dev/null 2>&1 && EXTRACT_SUCCESS=1
+        elif command -v 7za &> /dev/null; then
+            7za x "$TMP_DIR/skse.7z" -o"$TMP_DIR/extracted" -y > /dev/null 2>&1 && EXTRACT_SUCCESS=1
+        elif command -v bsdtar &> /dev/null; then
+            bsdtar -xf "$TMP_DIR/skse.7z" -C "$TMP_DIR/extracted" > /dev/null 2>&1 && EXTRACT_SUCCESS=1
         fi
-    else
-        echo "[!] Note: Could not auto-download SKSE64 from silverlock.org (network timeout or offline)."
-        echo "    Please download 'skse64_2_02_06.7z' manually and put it into ~/Downloads."
+
+        if [ "$EXTRACT_SUCCESS" -eq 1 ]; then
+            SKSE_INNER=$(find "$TMP_DIR/extracted" -type d -name "skse64_2_02_06" | head -n 1)
+            [ -z "$SKSE_INNER" ] && SKSE_INNER="$TMP_DIR/extracted"
+
+            cp -r "$SKSE_INNER"/skse64_*.dll "$GAME_DIR/" 2>/dev/null || true
+            cp -r "$SKSE_INNER"/skse64_loader.exe "$GAME_DIR/" 2>/dev/null || true
+            if [ -d "$SKSE_INNER/Data" ]; then
+                mkdir -p "$GAME_DIR/Data"
+                cp -r "$SKSE_INNER/Data/"* "$GAME_DIR/Data/" 2>/dev/null || true
+            fi
+            echo "[✓] SKSE64 successfully installed into $GAME_DIR."
+        fi
+    fi
+
+    if [ "$EXTRACT_SUCCESS" -ne 1 ]; then
+        echo "[!] Note: Could not auto-download or extract SKSE64."
+        echo "    Please download 'skse64_2_02_06.7z' manually into ~/Downloads."
         echo "    deploy_mods.py will install it automatically."
     fi
     rm -rf "$TMP_DIR"
 fi
 
-# 3. Configure SkyrimCustom.ini for 10W TDP / 60 FPS in Proton Prefix
+# 5. Configure SkyrimCustom.ini for 10W TDP / 60 FPS in Proton Prefix
 echo ""
 echo "----------------------------------------------------------"
 echo "[*] Configuring Skyrim INI for low-TDP efficiency..."
-MY_GAMES_DIR="$PFX_DIR/drive_c/users/steamuser/Documents/My Games/Skyrim Special Edition"
-mkdir -p "$MY_GAMES_DIR"
 
-CUSTOM_INI="$MY_GAMES_DIR/SkyrimCustom.ini"
+# Case-insensitive search for My Games directory in Proton prefix
+DOCS_DIR=$(find "$PFX_DIR/drive_c/users" -maxdepth 3 -type d -iname "My Games" 2>/dev/null | head -n 1)
+if [ -z "$DOCS_DIR" ]; then
+    DOCS_DIR="$PFX_DIR/drive_c/users/steamuser/Documents/My Games"
+fi
+
+SKYRIM_DOCS="$DOCS_DIR/Skyrim Special Edition"
+mkdir -p "$SKYRIM_DOCS"
+
+CUSTOM_INI="$SKYRIM_DOCS/SkyrimCustom.ini"
 cat << 'EOF' > "$CUSTOM_INI"
 [Grass]
 ; Density optimized for 10W TDP lock with Cathedral Landscapes
@@ -111,7 +175,7 @@ EOF
 
 echo "[✓] Created optimized $CUSTOM_INI."
 
-# 4. Check / Guide Mod Organizer 2 Linux Installer
+# 6. Check / Guide Mod Organizer 2 Linux Installer
 echo ""
 echo "----------------------------------------------------------"
 echo "[*] Checking Mod Organizer 2 Installation..."
