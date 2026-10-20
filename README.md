@@ -80,11 +80,16 @@ Return to SteamOS **Game Mode** and launch Skyrim Special Edition!
 
 ## 🔋 Recommended Power Profiles
 
-| Mode | TDP Limit | In-Game Resolution | SteamOS FSR | Framerate Target | Expected Battery Life |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| **Eco / Handheld Mode** | **10 Watts** | 800p (1280x800) / 900p | Sharpness: 2 or 3 | **Locked 60 FPS** | **~3.5 – 4.5+ Hours** |
-| **Balanced Mode** | **15 Watts** | Native 1080p / 1200p | Off / Minimal | **Locked 60 FPS** | **~2.5 – 3.0 Hours** |
-| **Docked / 120Hz High-Refresh** | **25W – 30W** | Native 1080p / 1200p | Off | **90 – 120 FPS (VRR)** | Plugged into wall |
+| Mode | Target Devices | APU TDP Limit | In-Game Resolution | SteamOS FSR | Target Framerate | Real-World Battery |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **Eco / Battery Saver** | **All Handhelds** | **9W – 10W** | **800p (1280x800)** | On (Go / Ally)<br>Off (Deck) | **Locked 60 FPS**<br>*(or 45 FPS on Deck)* | **~3.0 – 4.0 Hours**<br>*(4.5+ on OLED / Ally X)* |
+| **Balanced (Native)** | **All Handhelds** | **12W – 15W** | **Native Display**<br>(1200p / 1080p / 800p) | Off | **Locked 60 FPS** | **~2.0 – 2.8 Hours** |
+| **High Refresh (Docked)** | **Legion Go S / Ally only** | **25W – 30W** | **Native 1200p / 1080p** | Off | **90 – 120 FPS (VRR)**<br>*(Requires INI tweak)* | Plugged into wall |
+
+> [!NOTE]
+> **Unlocking 120 FPS for Docked Play**: By default, `deploy_mods.py` locks the game to **60.0 FPS** to guarantee consistent frame pacing and thermal efficiency on battery. When playing plugged in on a 120Hz device, open `mods/SSE Display Tweaks/SKSE/Plugins/DisplayTweaks.ini` and set `FramerateLimit = 120.0` (or `0` to uncap).
+>
+> **Steam Deck Note**: On the Steam Deck, 800p (1280x800) is the screen's native resolution, so SteamOS FSR should be left **Off**. For maximum battery life on Steam Deck OLED, locking the refresh rate to **45Hz / 45 FPS** yields 4.5 to 5+ hours of continuous gameplay.
 
 ---
 
@@ -110,7 +115,7 @@ Return to SteamOS **Game Mode** and launch Skyrim Special Edition!
 We recommend starting a new playthrough. The Simonrim gameplay overhauls (*Adamant*, *Mysticism*, *Blade & Blunt*) modernize perk trees, spells, and standing stones from level 1.
 
 #### Q: Can I run this at 120 FPS on my Legion Go S?
-Yes! `SSE Display Tweaks` dynamically calculates Havok physics per frame. If you are plugged into power and set your TDP to 25W–30W, the game will run smoothly up to 120 FPS.
+Yes! `SSE Display Tweaks` dynamically calculates Havok physics per frame without bugs above 60 FPS. If you are plugged into power and set your TDP to 25W–30W, open `DisplayTweaks.ini` inside MO2's mods folder, set `FramerateLimit = 120.0`, and the game will run smoothly up to 120 FPS.
 
 ---
 
