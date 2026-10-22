@@ -74,16 +74,20 @@ Open your browser in Desktop Mode and download the curated mods into your defaul
 Once your downloads finish, run:
 ```bash
 python3 deploy_mods.py
+# (Or: python3 deploy_mods.py --no-backup to save disk space on small storage drives)
 ```
 *The deployer will:*
 * Verify runtime 1.7.104 directly from `SkyrimSE.exe`'s PE binary headers.
 * Run preflight checks to ensure all required archives are present and reject ambiguous duplicate files.
 * Extract all archives to temporary staging, validate files, and select 1.7.104 binaries from FOMOD packages (*PO3 Tweaks*, *Papyrus Extender*).
 * Validate plugin headers (`TES4`) to ensure zero unowned Creation Club master dependencies.
-* Back up existing files and deploy Engine Fixes Part 2 binaries to the game root (logged in `.handheld_root_manifest.json`).
+* Optimize `EngineFixes.toml` for handheld stability (`SaveScreenshots=false`, `MemoryManager=false`).
+* Safely back up existing files (pruned to 2 revisions, or cleaned up if `--no-backup` is used).
+* Deploy Engine Fixes Part 2 binaries to the game root (logged in `.handheld_root_manifest.json`).
 * Inject validated upstream overrides into `SSEDisplayTweaks_Custom.ini` (60 FPS lock & Havok physics fix).
 * Generate a dedicated MO2 profile (`Handheld-10W`) with a topologically sorted load order (`plugins.txt` and `loadorder.txt`).
 * Automatically select `selected_profile = Handheld-10W` in `ModOrganizer.ini`.
+* Provide automatic transactional rollback if an error occurs during commit.
 
 ### Step 4: Verify Profile & Launch via SKSE
 To ensure your new mods and profile are loaded:
@@ -154,6 +158,17 @@ The setup and deployment scripts inspect `SkyrimSE.exe`'s PE binary headers dire
 
 #### Q: Why are TrueHUD and Valhalla Combat marked optional?
 On runtime 1.7.104, community users have reported startup crashes with TrueHUD and the unofficial Valhalla 1.7.104 port. To ensure high stability and avoid startup crashes, they are omitted from the default mandatory preset. *Blade & Blunt + Precision + TDM* provides modern, balanced combat with high stability and native 1.7.104 compatibility.
+
+#### Q: How do I protect my modded game from Bethesda's upcoming updates?
+Bethesda has announced an upcoming update for Skyrim SE on Steam. Because SKSE relies on exact executable memory offsets, unexpected game updates temporarily break SKSE until modders release an update.
+To freeze your working installation on runtime `1.7.104`:
+1. **Steam Update Setting**: In Steam Game Mode, go to **Skyrim Special Edition** -> **Gear icon (Properties)** -> **Updates** -> Set **Automatic Updates** to **"Only update this game when I launch it"**.
+   *(Because you launch Skyrim via SKSE / Mod Organizer 2 rather than Steam's standard launcher, Steam will never trigger an automatic download).*
+2. **Write-Protect AppManifest (Optional extra safeguard)**:
+   ```bash
+   chmod 444 ~/.local/share/Steam/steamapps/appmanifest_489830.acf
+   ```
+   *(To allow Steam to update games in the future, run `chmod 644 ~/.local/share/Steam/steamapps/appmanifest_489830.acf`).*
 
 #### Q: Does this work with the GOG, Epic Games, or Game Pass editions?
 **No.** 

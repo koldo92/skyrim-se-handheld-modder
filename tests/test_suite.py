@@ -22,6 +22,9 @@ from deploy_mods import (
     match_archives_preflight,
     activate_mo2_profile,
     inject_display_tweaks_custom_config,
+    tune_engine_fixes_config,
+    handle_fomod_and_flatten,
+    prune_old_backups,
     ALLOWED_BASE_MASTERS,
     REQUIRED_RUNTIME,
     REQUIRED_SKSE_DLL,
@@ -190,6 +193,62 @@ class TestHandheldSuite(unittest.TestCase):
             updated = ini_file.read_text(encoding="utf-8")
             self.assertIn("selected_profile = Handheld-10W", updated)
             self.assertNotIn("selected_profile = Default", updated)
+
+    def test_tune_engine_fixes_config(self):
+        """Verifies that EngineFixes.toml is properly tuned for handheld performance."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            mod_path = Path(tmp_dir)
+            plugins_dir = mod_path / "SKSE" / "Plugins"
+            plugins_dir.mkdir(parents=True)
+            toml_file = plugins_dir / "EngineFixes.toml"
+            initial_toml = """[Patches]
+EnableAchievementsWithMods = false
+MemoryManager = true
+SaveScreenshots = true
+"""
+            toml_file.write_text(initial_toml, encoding="utf-8")
+
+            tune_engine_fixes_config(mod_path)
+
+            tuned = toml_file.read_text(encoding="utf-8")
+            self.assertIn("SaveScreenshots = false", tuned)
+            self.assertIn("MemoryManager = false", tuned)
+            self.assertIn("EnableAchievementsWithMods = true", tuned)
+
+    def test_fomod_runtime_disambiguation(self):
+        """Verifies that handle_fomod_and_flatten extracts 1.7.104 binary over 1.6.1170."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            mod_path = Path(tmp_dir)
+            old_dir = mod_path / "01 - 1.6.1170" / "SKSE" / "Plugins"
+            old_dir.mkdir(parents=True)
+            (old_dir / "po3_Tweaks.dll").write_text("OLD_1170_BINARY", encoding="utf-8")
+
+            new_dir = mod_path / "02 - 1.7.104" / "SKSE" / "Plugins"
+            new_dir.mkdir(parents=True)
+            (new_dir / "po3_Tweaks.dll").write_text("NEW_17104_BINARY", encoding="utf-8")
+
+            handle_fomod_and_flatten(mod_path, "1.7.104", fomod_handler="po3_tweaks")
+
+            target_dll = mod_path / "SKSE" / "Plugins" / "po3_Tweaks.dll"
+            self.assertTrue(target_dll.is_file())
+            self.assertEqual(target_dll.read_text(encoding="utf-8"), "NEW_17104_BINARY")
+
+    def test_prune_old_backups(self):
+        """Verifies that prune_old_backups keeps only the max_keep most recent backups."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            backup_root = Path(tmp_dir)
+            (backup_root / "20261020_000000").mkdir()
+            (backup_root / "20261021_000000").mkdir()
+            (backup_root / "20261022_100000").mkdir()
+            (backup_root / "20261022_120000").mkdir()
+
+            prune_old_backups(backup_root, max_keep=2)
+
+            remaining = [d.name for d in backup_root.iterdir() if d.is_dir()]
+            self.assertEqual(len(remaining), 2)
+            self.assertIn("20261022_100000", remaining)
+            self.assertIn("20261022_120000", remaining)
+            self.assertNotIn("20261020_000000", remaining)
 
 if __name__ == "__main__":
     unittest.main()

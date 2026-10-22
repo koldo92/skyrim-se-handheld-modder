@@ -282,6 +282,27 @@ else
     fi
 fi
 
+# 8. Bethesda Patch Freeze Safeguard
+echo ""
+echo "----------------------------------------------------------"
+echo "[*] Bethesda Update Safeguard..."
+MANIFEST_FILE=""
+for lib in "${LIBRARIES[@]}"; do
+    if [ -f "$lib/steamapps/appmanifest_489830.acf" ]; then
+        MANIFEST_FILE="$lib/steamapps/appmanifest_489830.acf"
+        break
+    fi
+done
+
+if [ -n "$MANIFEST_FILE" ]; then
+    echo "[+] Found Steam AppManifest: $MANIFEST_FILE"
+    echo "    Bethesda has announced an upcoming Skyrim SE update on Steam."
+    echo "    To freeze your working installation and prevent breaking SKSE 2.3.1:"
+    echo "    1. In Steam Game Mode: Skyrim SE -> Properties -> Updates -> 'Only update when launched'."
+    echo "    2. Optionally write-protect the manifest: chmod 444 \"$MANIFEST_FILE\""
+    echo "       (To re-enable Steam updates later, run: chmod 644 \"$MANIFEST_FILE\")"
+fi
+
 echo ""
 echo "=========================================================="
 echo "  Setup Step Complete!"

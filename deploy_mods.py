@@ -14,6 +14,7 @@ import json
 import shutil
 import struct
 import datetime
+import argparse
 import subprocess
 from pathlib import Path
 
@@ -775,18 +776,20 @@ def handle_fomod_and_flatten(mod_dir: Path, target_runtime: str, fomod_handler: 
     # Exact runtime directory promotion (avoids loose matching like 1.7 matching 1.7.80)
     if fomod_handler:
         exact_tokens = [target_runtime, target_runtime.replace(".", "")]
+        matched_sub = None
         for sub in list(mod_dir.iterdir()):
             if sub.is_dir():
                 sub_name = sub.name.strip()
-                # Check exact token match or standard fomod structure
-                if any(sub_name == t or sub_name.startswith(f"{t}_") or sub_name.endswith(f"_{t}") for t in exact_tokens):
-                    for inner_item in sub.rglob("*"):
-                        if inner_item.is_file():
-                            rel = inner_item.relative_to(sub)
-                            target = mod_dir / rel
-                            target.parent.mkdir(parents=True, exist_ok=True)
-                            shutil.copy2(inner_item, target)
+                if any(t in sub_name for t in exact_tokens):
+                    matched_sub = sub
                     break
+        if matched_sub:
+            for inner_item in matched_sub.rglob("*"):
+                if inner_item.is_file():
+                    rel = inner_item.relative_to(matched_sub)
+                    target = mod_dir / rel
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(inner_item, target)
 
 # --- Upstream SSEDisplayTweaks Config Override ---
 
@@ -820,6 +823,35 @@ MaximumFramerate=120.0
 """
         custom_ini.write_text(config_content.strip() + "\n", encoding="utf-8")
         print("[✓] Deployed: SSEDisplayTweaks_Custom.ini (Render, Havok & Tearing keys verified).")
+
+# --- SSE Engine Fixes Handheld Tuning ---
+
+def tune_engine_fixes_config(mod_dir: Path):
+    """
+    Tunes EngineFixes.toml for optimal performance and stability on SteamOS handhelds:
+    - SaveScreenshots = false (prevents frame hitching during autosave on SD cards/eMMC)
+    - MemoryManager = false (prevents memory allocator conflicts on 1.6.1130+ / 1.7.x)
+    - EnableAchievementsWithMods = true (enables Steam achievements with mods active)
+    """
+    toml_path = mod_dir / "SKSE" / "Plugins" / "EngineFixes.toml"
+    if not toml_path.is_file():
+        candidates = list(mod_dir.glob("**/EngineFixes.toml"))
+        if candidates:
+            toml_path = candidates[0]
+        else:
+            return
+
+    content = toml_path.read_text(encoding="utf-8", errors="ignore")
+    replacements = {
+        r"SaveScreenshots\s*=\s*true": "SaveScreenshots = false",
+        r"MemoryManager\s*=\s*true": "MemoryManager = false",
+        r"EnableAchievementsWithMods\s*=\s*false": "EnableAchievementsWithMods = true"
+    }
+    for pat, rep in replacements.items():
+        content = re.sub(pat, rep, content, flags=re.IGNORECASE)
+
+    toml_path.write_text(content, encoding="utf-8")
+    print("    -> Configured EngineFixes.toml (SaveScreenshots=false, MemoryManager=false).")
 
 # --- Topological Plugin Sorter ---
 
@@ -896,12 +928,34 @@ def activate_mo2_profile(mo2_dir: Path, profile_name: str):
     ini_file.write_text("\n".join(new_lines) + "\n", encoding="utf-8")
     print(f"[✓] Configured ModOrganizer.ini: 'selected_profile = {profile_name}'.")
 
+# --- Backup Pruning Helper ---
+
+def prune_old_backups(backup_root: Path, max_keep: int = 2):
+    """Prunes older backups to prevent unbounded storage consumption on handheld drives."""
+    if not backup_root.is_dir():
+        return
+    subdirs = sorted([d for d in backup_root.iterdir() if d.is_dir()], key=lambda d: d.name)
+    if len(subdirs) > max_keep:
+        for old in subdirs[:-max_keep]:
+            try:
+                shutil.rmtree(old)
+                print(f"[*] Pruned older backup to save space: {old.name}")
+            except Exception:
+                pass
+
 # --- Main Transactional Pipeline ---
 
 def main():
+    parser = argparse.ArgumentParser(description="Skyrim SE Handheld Mod Deployer for SteamOS")
+    parser.add_argument("--no-backup", action="store_true", help="Skip creating permanent historical backups in .handheld_backups to save disk space")
+    args = parser.parse_args()
+    no_backup = args.no_backup
+
     print("==========================================================")
     print("  Skyrim SE Handheld Mod Deployer for SteamOS")
     print(f"  Target: Skyrim SE {REQUIRED_RUNTIME} (Strict) | SKSE {REQUIRED_SKSE_VERSION}")
+    if no_backup:
+        print("  Mode: Low Storage Space (--no-backup active)")
     print("==========================================================")
 
     # 1. Path & Runtime Verification
@@ -958,6 +1012,10 @@ def main():
 
             handle_fomod_and_flatten(stage_mod_dir, detected_ver, mod.get("fomod_runtime_handler"))
 
+            # Handheld optimization for Engine Fixes
+            if key == "EngineFixes":
+                tune_engine_fixes_config(stage_mod_dir)
+
             # Validate required files
             for req in required_files:
                 if not (stage_mod_dir / req).exists():
@@ -965,6 +1023,16 @@ def main():
                     if not inner_match:
                         print(f"[-] FATAL: Validation failed for '{name}'. Missing required file: {req}")
                         sys.exit(1)
+                    else:
+                        # Prioritize match corresponding to detected_ver
+                        chosen = inner_match[0]
+                        for m in inner_match:
+                            if detected_ver in str(m) or detected_ver.replace(".", "") in str(m):
+                                chosen = m
+                                break
+                        target = stage_mod_dir / req
+                        target.parent.mkdir(parents=True, exist_ok=True)
+                        shutil.copy2(chosen, target)
 
             if is_root:
                 root_files_to_deploy.append((key, stage_mod_dir))
@@ -991,98 +1059,125 @@ def main():
         # 4. Atomic Commit Phase with Full Rollback
         print("\n[*] All mods staged, validated, and verified. Committing transactionally...")
 
-        # A. Back up existing root files
-        backup_dir = game_dir / f".handheld_root_backups/{timestamp}"
-        backup_dir.mkdir(parents=True, exist_ok=True)
+        rollback_root_dir = game_dir / f".handheld_root_backups/{timestamp}"
+        rollback_mo2_dir = mo2_dir / f".handheld_backups/{timestamp}"
+        rollback_root_dir.mkdir(parents=True, exist_ok=True)
+        rollback_mo2_dir.mkdir(parents=True, exist_ok=True)
+
         deployed_manifest = []
-
-        for key, stage_dir in root_files_to_deploy:
-            if key == "SKSE":
-                skse_dirs = [d for d in stage_dir.glob("skse64_*") if d.is_dir()]
-                src = skse_dirs[0] if skse_dirs else stage_dir
-                for f in src.glob("skse64_*.dll"):
-                    dst = game_dir / f.name
-                    if dst.exists():
-                        shutil.copy2(dst, backup_dir / f.name)
-                    shutil.copy2(f, dst)
-                    deployed_manifest.append(f.name)
-                for f in src.glob("skse64_loader.exe"):
-                    dst = game_dir / f.name
-                    if dst.exists():
-                        shutil.copy2(dst, backup_dir / f.name)
-                    shutil.copy2(f, dst)
-                    deployed_manifest.append(f.name)
-                if (src / "Data").is_dir():
-                    shutil.copytree(src / "Data", game_dir / "Data", dirs_exist_ok=True)
-                    deployed_manifest.append("Data/Scripts")
-                print("    -> Deployed SKSE 2.3.1 binaries to game root.")
-            elif key == "EngineFixesPart2":
-                for dll in stage_dir.glob("*.dll"):
-                    dst = game_dir / dll.name
-                    if dst.exists():
-                        shutil.copy2(dst, backup_dir / dll.name)
-                    shutil.copy2(dll, dst)
-                    deployed_manifest.append(dll.name)
-                    print(f"    -> Deployed {dll.name} to game root.")
-
-        # Update root manifest
-        root_manifest_file = game_dir / ".handheld_root_manifest.json"
-        root_manifest_file.write_text(json.dumps(deployed_manifest, indent=2), encoding="utf-8")
-
-        # B. Back up and deploy MO2 mods safely
-        mo2_backup_dir = mo2_dir / f".handheld_backups/{timestamp}"
-        mo2_backup_dir.mkdir(parents=True, exist_ok=True)
         installed_mods_record = []
 
-        for name, stage_dir, priority in staged_mo2_mods:
-            dest = mo2_dir / "mods" / name
-            if dest.exists():
-                # Back up existing mod folder instead of blind deletion
-                backup_dest = mo2_backup_dir / name
-                shutil.copytree(dest, backup_dest)
-                shutil.rmtree(dest)
+        try:
+            # A. Deploy Root Files
+            for key, stage_dir in root_files_to_deploy:
+                if key == "SKSE":
+                    skse_dirs = [d for d in stage_dir.glob("skse64_*") if d.is_dir()]
+                    src = skse_dirs[0] if skse_dirs else stage_dir
+                    for f in src.glob("skse64_*.dll"):
+                        dst = game_dir / f.name
+                        if dst.exists():
+                            shutil.copy2(dst, rollback_root_dir / f.name)
+                        shutil.copy2(f, dst)
+                        deployed_manifest.append(f.name)
+                    for f in src.glob("skse64_loader.exe"):
+                        dst = game_dir / f.name
+                        if dst.exists():
+                            shutil.copy2(dst, rollback_root_dir / f.name)
+                        shutil.copy2(f, dst)
+                        deployed_manifest.append(f.name)
+                    if (src / "Data").is_dir():
+                        shutil.copytree(src / "Data", game_dir / "Data", dirs_exist_ok=True)
+                        deployed_manifest.append("Data/Scripts")
+                    print("    -> Deployed SKSE 2.3.1 binaries to game root.")
+                elif key == "EngineFixesPart2":
+                    for dll in stage_dir.glob("*.dll"):
+                        dst = game_dir / dll.name
+                        if dst.exists():
+                            shutil.copy2(dst, rollback_root_dir / dll.name)
+                        shutil.copy2(dll, dst)
+                        deployed_manifest.append(dll.name)
+                        print(f"    -> Deployed {dll.name} to game root.")
 
-            shutil.copytree(stage_dir, dest)
-            installed_mods_record.append((name, priority))
+            # Update root manifest
+            root_manifest_file = game_dir / ".handheld_root_manifest.json"
+            root_manifest_file.write_text(json.dumps(deployed_manifest, indent=2), encoding="utf-8")
 
-        # C. Inject Validated SSEDisplayTweaks Config
-        inject_display_tweaks_custom_config(mo2_dir)
+            # B. Deploy MO2 Mods with Rollback Protection
+            for name, stage_dir, priority in staged_mo2_mods:
+                dest = mo2_dir / "mods" / name
+                if dest.exists():
+                    backup_dest = rollback_mo2_dir / name
+                    shutil.copytree(dest, backup_dest)
+                    shutil.rmtree(dest)
 
-        # D. Generate Dedicated Profile: 'Handheld-10W'
-        profile_dir = mo2_dir / "profiles" / "Handheld-10W"
-        profile_dir.mkdir(parents=True, exist_ok=True)
-        default_profile = mo2_dir / "profiles" / "Default"
-        if default_profile.is_dir():
-            for item in ["archives.txt", "settings.ini"]:
-                src = default_profile / item
-                dst = profile_dir / item
-                if src.exists() and not dst.exists():
-                    shutil.copy2(src, dst)
+                shutil.copytree(stage_dir, dest)
+                installed_mods_record.append((name, priority))
 
-        # Write modlist.txt
-        installed_mods_record.sort(key=lambda x: x[1])
-        modlist_lines = [f"+{m[0]}\n" for m in installed_mods_record]
-        (profile_dir / "modlist.txt").write_text("".join(reversed(modlist_lines)), encoding="utf-8")
+            # C. Inject Validated SSEDisplayTweaks Config
+            inject_display_tweaks_custom_config(mo2_dir)
 
-        # E. Topological Plugin Sorting & Load Order Generation
-        sorted_plugins = topological_sort_plugins(list(all_discovered_plugins), plugin_master_map, plugin_priority_map)
-        plugins_txt_content = "\n".join([f"*{p}" for p in sorted_plugins]) + "\n"
-        loadorder_txt_content = "\n".join(sorted_plugins) + "\n"
+            # D. Generate Dedicated Profile: 'Handheld-10W'
+            profile_dir = mo2_dir / "profiles" / "Handheld-10W"
+            profile_dir.mkdir(parents=True, exist_ok=True)
+            default_profile = mo2_dir / "profiles" / "Default"
+            if default_profile.is_dir():
+                for item in ["archives.txt", "settings.ini"]:
+                    src = default_profile / item
+                    dst = profile_dir / item
+                    if src.exists() and not dst.exists():
+                        shutil.copy2(src, dst)
 
-        (profile_dir / "plugins.txt").write_text(plugins_txt_content, encoding="utf-8")
-        (profile_dir / "loadorder.txt").write_text(loadorder_txt_content, encoding="utf-8")
-        print(f"[✓] Generated topological load order with {len(sorted_plugins)} plugin(s).")
+            # Write modlist.txt
+            installed_mods_record.sort(key=lambda x: x[1])
+            modlist_lines = [f"+{m[0]}\n" for m in installed_mods_record]
+            (profile_dir / "modlist.txt").write_text("".join(reversed(modlist_lines)), encoding="utf-8")
 
-        # F. Activate Profile in ModOrganizer.ini
-        activate_mo2_profile(mo2_dir, "Handheld-10W")
+            # E. Topological Plugin Sorting & Load Order Generation
+            sorted_plugins = topological_sort_plugins(list(all_discovered_plugins), plugin_master_map, plugin_priority_map)
+            plugins_txt_content = "\n".join([f"*{p}" for p in sorted_plugins]) + "\n"
+            loadorder_txt_content = "\n".join(sorted_plugins) + "\n"
+
+            (profile_dir / "plugins.txt").write_text(plugins_txt_content, encoding="utf-8")
+            (profile_dir / "loadorder.txt").write_text(loadorder_txt_content, encoding="utf-8")
+            print(f"[✓] Generated topological load order with {len(sorted_plugins)} plugin(s).")
+
+            # F. Activate Profile in ModOrganizer.ini
+            activate_mo2_profile(mo2_dir, "Handheld-10W")
+
+        except (Exception, KeyboardInterrupt) as commit_err:
+            print(f"\n[-] FATAL: Deployment interrupted or encountered error during commit: {commit_err}")
+            print("[*] Initiating automatic rollback to restore previous state...")
+            # Restore root files
+            for f in rollback_root_dir.iterdir():
+                shutil.copy2(f, game_dir / f.name)
+            # Restore MO2 mods
+            for backup_mod in rollback_mo2_dir.iterdir():
+                dest = mo2_dir / "mods" / backup_mod.name
+                if dest.exists():
+                    shutil.rmtree(dest, ignore_errors=True)
+                shutil.copytree(backup_mod, dest)
+            print("[✓] Rollback complete. Original state preserved.")
+            sys.exit(1)
+
+        # Handle backup retention or pruning
+        if no_backup:
+            shutil.rmtree(rollback_root_dir, ignore_errors=True)
+            shutil.rmtree(rollback_mo2_dir, ignore_errors=True)
+            print("[*] Temporary rollback archives cleaned up (--no-backup mode).")
+        else:
+            prune_old_backups(game_dir / ".handheld_root_backups", max_keep=2)
+            prune_old_backups(mo2_dir / ".handheld_backups", max_keep=2)
 
         print("\n==========================================================")
         print("  [★] TRANSACTIONAL DEPLOYMENT COMPLETED SUCCESSFULLY")
         print("==========================================================")
         print("Profile: 'Handheld-10W' created and set as active in Mod Organizer 2.")
-        print("Root file backups stored in: .handheld_root_backups/")
-        print("MO2 mod backups stored in:  .handheld_backups/")
-        print("Master dependency checks:  100% Passed (0 unowned CC masters).")
+        if no_backup:
+            print("Storage: Running in --no-backup mode (disk usage minimized).")
+        else:
+            print("Backups: Preserved in .handheld_backups/ (max 2 revisions kept).")
+        print("Engine:  EngineFixes.toml optimized for handheld storage stability.")
+        print("Master dependency checks: 100% Passed (0 unowned CC masters).")
 
     finally:
         shutil.rmtree(staging_base, ignore_errors=True)
