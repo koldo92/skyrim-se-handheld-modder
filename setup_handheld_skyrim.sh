@@ -159,18 +159,25 @@ if [ "$SKSE_VALID" -eq 0 ]; then
             SKSE_INNER=$(find "$TMP_DIR/extracted" -type d -name "skse64_*" | head -n 1)
             [ -z "$SKSE_INNER" ] && SKSE_INNER="$TMP_DIR/extracted"
 
-            cp -f "$SKSE_INNER"/skse64_*.dll "$GAME_DIR/" 2>/dev/null || true
-            cp -f "$SKSE_INNER"/skse64_loader.exe "$GAME_DIR/" 2>/dev/null || true
-            if [ -d "$SKSE_INNER/Data" ]; then
-                mkdir -p "$GAME_DIR/Data"
-                cp -rf "$SKSE_INNER/Data/"* "$GAME_DIR/Data/" 2>/dev/null || true
+            if cp -f "$SKSE_INNER"/skse64_*.dll "$GAME_DIR/" && cp -f "$SKSE_INNER"/skse64_loader.exe "$GAME_DIR/"; then
+                if [ -d "$SKSE_INNER/Data" ]; then
+                    mkdir -p "$GAME_DIR/Data"
+                    cp -rf "$SKSE_INNER/Data/"* "$GAME_DIR/Data/" || true
+                fi
+                if [ -f "$GAME_DIR/$REQUIRED_SKSE_DLL" ] && [ -f "$GAME_DIR/skse64_loader.exe" ]; then
+                    echo "[✓] SKSE64 $REQUIRED_SKSE_VER successfully deployed and verified in $GAME_DIR."
+                    SKSE_VALID=1
+                else
+                    echo "[-] Warning: SKSE copy completed but expected binary files ($REQUIRED_SKSE_DLL, skse64_loader.exe) were not found."
+                fi
+            else
+                echo "[-] Warning: Failed to copy SKSE files to $GAME_DIR. Check directory permissions."
             fi
-            echo "[✓] SKSE64 $REQUIRED_SKSE_VER successfully deployed to $GAME_DIR."
         fi
     fi
 
-    if [ "$EXTRACT_SUCCESS" -ne 1 ]; then
-        echo "[!] Note: Could not auto-download SKSE64."
+    if [ "$SKSE_VALID" -ne 1 ]; then
+        echo "[!] Note: SKSE64 auto-install was not completed or verified."
         echo "    Please manually download 'skse64_2_03_01.7z' into ~/Downloads."
         echo "    deploy_mods.py will install and verify it during staging."
     fi
@@ -282,5 +289,5 @@ echo "=========================================================="
 echo "Next Steps:"
 echo " 1. Consult 'MODS_DOWNLOAD_GUIDE.md' and download the required mods into ~/Downloads."
 echo " 2. Run 'python3 deploy_mods.py' to unpack, organize, and activate the 'Handheld-10W' profile."
-echo " 3. Launch Skyrim SE in Steam Game Mode!"
+echo " 3. Verify in MO2 that 'Handheld-10W' is active and launch through SKSE!"
 echo "=========================================================="

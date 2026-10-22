@@ -35,8 +35,10 @@
      python3 deploy_mods.py
      ```
    * This verifies runtime 1.7.104, runs a preflight check, transactionally stages all archives into a dedicated MO2 profile (`Handheld-10W`), selects 1.7.104 binaries from FOMOD packages, validates plugin masters against paid CC content, injects validated upstream overrides into `SSEDisplayTweaks_Custom.ini`, and builds a topologically sorted load order.
-5. **Step 4: Play in Game Mode**
-   * Switch back to SteamOS Game Mode and launch Skyrim SE!
+5. **Step 4: Verify Profile & Launch via SKSE**
+   * Switch to Desktop Mode or launch Mod Organizer 2.
+   * Confirm that the active profile dropdown shows **`Handheld-10W`** and the executable dropdown is set to **`SKSE`**.
+   * Launch via SKSE, or switch back to SteamOS Game Mode and launch Skyrim SE via the MO2-configured Steam shortcut!
 
 ---
 
@@ -86,7 +88,7 @@
 
 > [!NOTE]
 > **Behavior Engine Scope (Nemesis / Pandora)**:  
-> * **What Works Out-of-the-Box**: Full 360° directional movement, target lock-on, SmoothCam over-the-shoulder tracking, and Havok physical weapon collision hitboxes (*Precision*) work 100% natively via SKSE C++ DLLs without any behavior engine.  
+> * **What Works Out-of-the-Box**: Full 360° directional movement, target lock-on, SmoothCam over-the-shoulder tracking, and Havok physical weapon collision hitboxes (*Precision*) work natively via SKSE C++ DLLs without any behavior engine.  
 > * **What Requires Nemesis**: Optional procedural recoil flinching in *Precision* and procedural headtracking corrections in *TDM* recommend running Nemesis. For maximum handheld battery and zero Linux setup friction, this preset runs cleanly without an external behavior tool.
 
 | Mod Name | Nexus Link | Exact File / 1.7.104 Audit Status |
@@ -97,7 +99,7 @@
 | **Precision - Melee Collisions** | [Nexus #72347](https://www.nexusmods.com/skyrimspecialedition/mods/72347) | Main File *(Havok physical hitboxes. Requires MCM Helper)* |
 | **Mortal Enemies SE** | [Nexus #4881](https://www.nexusmods.com/skyrimspecialedition/mods/4881) | Main File *(Removes enemy 360° aimbot tracking mid-attack)* |
 | **Simple Dual Sheath** | [Nexus #49710](https://www.nexusmods.com/skyrimspecialedition/mods/49710) | Main File *(Shields on back, visible secondary weapons)* |
-| **Valhalla Combat (Optional / Experimental)** | [Nexus #191704](https://www.nexusmods.com/skyrimspecialedition/mods/191704) | *Note: Unofficial 1.7.104 port has crash reports. Omitted from default preset to ensure 100% stability. Blade & Blunt handles combat balance cleanly.* |
+| **Valhalla Combat (Optional / Experimental)** | [Nexus #191704](https://www.nexusmods.com/skyrimspecialedition/mods/191704) | *Note: Unofficial 1.7.104 port has crash reports. Omitted from default preset to ensure high stability and avoid startup crashes. Blade & Blunt handles combat balance cleanly.* |
 
 ---
 

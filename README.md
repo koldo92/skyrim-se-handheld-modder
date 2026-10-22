@@ -83,9 +83,14 @@ python3 deploy_mods.py
 * Back up existing files and deploy Engine Fixes Part 2 binaries to the game root (logged in `.handheld_root_manifest.json`).
 * Inject validated upstream overrides into `SSEDisplayTweaks_Custom.ini` (60 FPS lock & Havok physics fix).
 * Generate a dedicated MO2 profile (`Handheld-10W`) with a topologically sorted load order (`plugins.txt` and `loadorder.txt`).
+* Automatically select `selected_profile = Handheld-10W` in `ModOrganizer.ini`.
 
-### Step 4: Play in Game Mode
-Return to SteamOS **Game Mode** and launch Skyrim Special Edition!
+### Step 4: Verify Profile & Launch via SKSE
+To ensure your new mods and profile are loaded:
+1. **Desktop Mode First Run (Recommended)**: Launch Mod Organizer 2 from Steam or the desktop shortcut created by MO2-LINT.
+2. **Verify Active Profile**: Confirm the profile dropdown in MO2 shows **`Handheld-10W`** (the deployer automatically sets this as active in `ModOrganizer.ini`).
+3. **Verify SKSE Executable**: In the executable dropdown next to the large **Run** button, confirm **`SKSE`** (pointing to `skse64_loader.exe`) is selected. Click **Run** once to verify that Skyrim boots cleanly with SKSE plugins loaded.
+4. **Game Mode Launch**: Return to SteamOS **Game Mode**. If you used MO2-LINT to set up the Steam shortcut / launcher redirect, launching Skyrim Special Edition will directly launch Mod Organizer 2 and SKSE with the active `Handheld-10W` profile.
 
 ---
 
@@ -145,10 +150,10 @@ python3 tests/test_suite.py
 The setup and deployment scripts inspect `SkyrimSE.exe`'s PE binary headers directly. When runtime 1.7.104 is detected, the suite installs matching SKSE v2.3.1 binaries, selects 1.7.104 modules from FOMOD packages, and utilizes Address Library v13.
 
 #### Q: Do I need an animation behavior tool (Nemesis / Pandora)?
-**No, not for the core preset.** Full 360° directional movement, target lock-on (*TDM*), responsive camera (*SmoothCam*), and physical Havok weapon hitboxes (*Precision*) are handled entirely by native SKSE C++ DLLs. Optional procedural recoil flinching and headtracking corrections recommend Nemesis, but are omitted to keep the handheld preset 100% crash-free.
+**No, not for the core preset.** Full 360° directional movement, target lock-on (*TDM*), responsive camera (*SmoothCam*), and physical Havok weapon hitboxes (*Precision*) are handled natively by verified SKSE C++ DLLs. Optional procedural recoil flinching and headtracking corrections recommend Nemesis, but are omitted to keep the handheld preset stable, lightweight, and self-contained without fragile behavior engine patches.
 
 #### Q: Why are TrueHUD and Valhalla Combat marked optional?
-On runtime 1.7.104, community users have reported startup crashes with TrueHUD and the unofficial Valhalla 1.7.104 port. To guarantee an out-of-the-box working game, they are omitted from the default mandatory preset. *Blade & Blunt + Precision + TDM* provides modern, balanced combat with 100% stability.
+On runtime 1.7.104, community users have reported startup crashes with TrueHUD and the unofficial Valhalla 1.7.104 port. To ensure high stability and avoid startup crashes, they are omitted from the default mandatory preset. *Blade & Blunt + Precision + TDM* provides modern, balanced combat with high stability and native 1.7.104 compatibility.
 
 #### Q: Does this work with the GOG, Epic Games, or Game Pass editions?
 **No.** 

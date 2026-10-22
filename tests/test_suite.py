@@ -2,6 +2,7 @@
 """
 tests/test_suite.py
 Automated Verification & Unit Tests for Skyrim SE Handheld Modder Suite
+Target: Steam Game Runtime 1.7.104 | SKSE 2.3.1
 """
 
 import unittest
@@ -10,23 +11,27 @@ import tempfile
 import shutil
 from pathlib import Path
 
-# Import functions from deploy_mods
+# Import functions and definitions from deploy_mods
 import sys
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from deploy_mods import (
     get_pe_file_version,
     parse_tes4_masters,
+    validate_plugin_masters,
     topological_sort_plugins,
     match_archives_preflight,
+    activate_mo2_profile,
+    inject_display_tweaks_custom_config,
     ALLOWED_BASE_MASTERS,
     REQUIRED_RUNTIME,
+    REQUIRED_SKSE_DLL,
     MOD_MANIFEST
 )
 
 class TestHandheldSuite(unittest.TestCase):
 
     def test_pe_header_version_detection(self):
-        """Verifies accurate detection of Windows PE FileVersion."""
+        """Verifies accurate extraction of Windows PE FileVersion from VS_FIXEDFILEINFO."""
         with tempfile.NamedTemporaryFile(suffix=".exe", delete=False) as f:
             # Build synthetic VS_FIXEDFILEINFO (magic: 0xFEEF04BD, major: 1, minor: 7, build: 104, rev: 0)
             magic = 0xFEEF04BD
@@ -43,48 +48,79 @@ class TestHandheldSuite(unittest.TestCase):
         finally:
             temp_path.unlink()
 
-    def test_tes4_master_parsing_and_cc_validation(self):
-        """Verifies extraction of plugin masters and detection of paid Creation Club DLCs."""
-        # 1. Synthetic plugin with allowed base masters
+    def test_tes4_master_parsing(self):
+        """Verifies binary extraction of plugin masters (MAST subrecords) from a TES4 header."""
         mast1 = b"Skyrim.esm\x00"
         sub1 = b"MAST" + struct.pack("<H", len(mast1)) + mast1
         mast2 = b"ccbgssse001-fish.esm\x00"
         sub2 = b"MAST" + struct.pack("<H", len(mast2)) + mast2
         data = sub1 + sub2
         header = b"TES4" + struct.pack("<I", len(data)) + (b"\x00" * 16)
-        synth_plugin_valid = header + data
+        synth_plugin = header + data
 
         with tempfile.NamedTemporaryFile(suffix=".esp", delete=False) as f:
-            f.write(synth_plugin_valid)
-            temp_valid = Path(f.name)
+            f.write(synth_plugin)
+            temp_path = Path(f.name)
 
         try:
-            masters = parse_tes4_masters(temp_valid)
+            masters = parse_tes4_masters(temp_path)
             self.assertEqual(masters, ["Skyrim.esm", "ccbgssse001-fish.esm"])
-            # Validate against allowed base masters (should all pass)
             for m in masters:
                 self.assertIn(m.lower(), ALLOWED_BASE_MASTERS)
         finally:
-            temp_valid.unlink()
+            temp_path.unlink()
 
-        # 2. Synthetic plugin with unauthorized paid Creation Club master
+    def test_validate_plugin_masters_enforcement(self):
+        """Verifies that validate_plugin_masters rejects unowned CC DLCs and missing ordinary masters."""
+        # Case A: Plugin requiring unauthorized paid Creation Club DLC
         mast_paid = b"ccbgssse002-exoticpets.esl\x00"
         sub_paid = b"MAST" + struct.pack("<H", len(mast_paid)) + mast_paid
         header_paid = b"TES4" + struct.pack("<I", len(sub_paid)) + (b"\x00" * 16)
-        synth_plugin_paid = header_paid + sub_paid
 
         with tempfile.NamedTemporaryFile(suffix=".esp", delete=False) as f:
-            f.write(synth_plugin_paid)
+            f.write(header_paid + sub_paid)
             temp_paid = Path(f.name)
 
         try:
-            masters_paid = parse_tes4_masters(temp_paid)
-            self.assertEqual(masters_paid, ["ccbgssse002-exoticpets.esl"])
-            # Ensure it is flagged as NOT in base masters
-            for m in masters_paid:
-                self.assertNotIn(m.lower(), ALLOWED_BASE_MASTERS)
+            # Must abort on paid CC master
+            with self.assertRaises(SystemExit):
+                validate_plugin_masters(temp_paid, {"SkyUI_SE.esp"})
         finally:
             temp_paid.unlink()
+
+        # Case B: Plugin requiring an ordinary master that is missing from active plugins
+        mast_missing = b"MissingRequiredMaster.esm\x00"
+        sub_missing = b"MAST" + struct.pack("<H", len(mast_missing)) + mast_missing
+        header_missing = b"TES4" + struct.pack("<I", len(sub_missing)) + (b"\x00" * 16)
+
+        with tempfile.NamedTemporaryFile(suffix=".esp", delete=False) as f:
+            f.write(header_missing + sub_missing)
+            temp_missing = Path(f.name)
+
+        try:
+            # Must abort on missing master
+            with self.assertRaises(SystemExit):
+                validate_plugin_masters(temp_missing, {"SkyUI_SE.esp"})
+        finally:
+            temp_missing.unlink()
+
+        # Case C: Plugin requiring base game master and an active mod -> must succeed
+        mast_ok1 = b"Skyrim.esm\x00"
+        sub_ok1 = b"MAST" + struct.pack("<H", len(mast_ok1)) + mast_ok1
+        mast_ok2 = b"SkyUI_SE.esp\x00"
+        sub_ok2 = b"MAST" + struct.pack("<H", len(mast_ok2)) + mast_ok2
+        data_ok = sub_ok1 + sub_ok2
+        header_ok = b"TES4" + struct.pack("<I", len(data_ok)) + (b"\x00" * 16)
+
+        with tempfile.NamedTemporaryFile(suffix=".esp", delete=False) as f:
+            f.write(header_ok + data_ok)
+            temp_ok = Path(f.name)
+
+        try:
+            # Should not raise
+            validate_plugin_masters(temp_ok, {"SkyUI_SE.esp"})
+        finally:
+            temp_ok.unlink()
 
     def test_topological_sort_preserves_master_order(self):
         """Verifies that topological sort guarantees masters precede dependent plugins."""
@@ -115,8 +151,7 @@ class TestHandheldSuite(unittest.TestCase):
             match_archives_preflight([archive1, archive2])
 
     def test_display_tweaks_upstream_keys(self):
-        """Verifies that SSEDisplayTweaks config uses validated upstream keys under [Render] and [Havok]."""
-        from deploy_mods import inject_display_tweaks_custom_config
+        """Verifies that SSEDisplayTweaks config strictly uses validated upstream keys."""
         with tempfile.TemporaryDirectory() as tmp_dir:
             tmp_mo2 = Path(tmp_dir)
             target_dir = tmp_mo2 / "mods" / "SSE Display Tweaks" / "SKSE" / "Plugins"
@@ -127,17 +162,34 @@ class TestHandheldSuite(unittest.TestCase):
             self.assertTrue(custom_ini.is_file())
             content = custom_ini.read_text(encoding="utf-8")
 
-            # Must contain upstream sections and keys
+            # Must contain upstream sections and verified keys
             self.assertIn("[Render]", content)
             self.assertIn("FramerateLimit=60.0", content)
             self.assertIn("EnableVSync=false", content)
+            self.assertIn("EnableTearing=true", content)
+            self.assertIn("SwapEffect=flip_discard", content)
             self.assertIn("[Havok]", content)
             self.assertIn("Enabled=true", content)
-            self.assertIn("MaxPhysicsFPS=120.0", content)
+            self.assertIn("DynamicMaxTimeScaling=true", content)
+            self.assertIn("MaximumFramerate=120.0", content)
 
             # Must NOT contain obsolete or invalid keys
+            self.assertNotIn("MaxPhysicsFPS", content)
             self.assertNotIn("[Framerate]", content)
             self.assertNotIn("CalculateHavokTickRate", content)
+
+    def test_activate_mo2_profile(self):
+        """Verifies that activate_mo2_profile reliably updates selected_profile in ModOrganizer.ini."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            mo2_path = Path(tmp_dir)
+            ini_file = mo2_path / "ModOrganizer.ini"
+            ini_file.write_text("[General]\ngameName = Skyrim Special Edition\nselected_profile = Default\n", encoding="utf-8")
+
+            activate_mo2_profile(mo2_path, "Handheld-10W")
+
+            updated = ini_file.read_text(encoding="utf-8")
+            self.assertIn("selected_profile = Handheld-10W", updated)
+            self.assertNotIn("selected_profile = Default", updated)
 
 if __name__ == "__main__":
     unittest.main()
