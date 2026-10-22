@@ -3,14 +3,19 @@
 # setup_handheld_skyrim.sh
 # Setup Script for Modding Skyrim SE on SteamOS Handheld PCs
 # (Lenovo Legion Go / Go S, Steam Deck LCD/OLED, ASUS ROG Ally)
-# Target: Current Steam Runtime (1.7.104 / SKSE 2.3.1)
+# Target: Current Steam Runtime (1.7.104 Strictly) | SKSE 2.3.1
 # ==============================================================================
 
 set -e
 
+REQUIRED_RUNTIME="1.7.104"
+REQUIRED_SKSE_VER="2.3.1"
+REQUIRED_SKSE_DLL="skse64_1_7_104.dll"
+SKSE_URL="https://silverlock.org/download/skse/skse64_2_03_01.7z"
+
 echo "=========================================================="
 echo "  Skyrim SE Handheld Modding Setup for SteamOS"
-echo "  Target: Current Steam Runtime (1.7.104 / SKSE 2.3.1)"
+echo "  Target: Steam Runtime $REQUIRED_RUNTIME | SKSE $REQUIRED_SKSE_VER"
 echo "=========================================================="
 echo ""
 
@@ -90,10 +95,10 @@ PFX_DIR="$COMPAT_DIR/pfx"
 echo "[+] Game Directory:          $GAME_DIR"
 echo "[+] Proton Prefix:           $PFX_DIR"
 
-# 4. Detect and Validate SkyrimSE.exe Binary Runtime
+# 4. Strictly Detect and Validate SkyrimSE.exe Binary Runtime
 echo ""
 echo "----------------------------------------------------------"
-echo "[*] Detecting SkyrimSE.exe runtime version..."
+echo "[*] Verifying SkyrimSE.exe binary runtime..."
 
 DETECTED_VER=$(python3 -c '
 import sys, struct
@@ -110,45 +115,33 @@ if exe.is_file():
 ' "$GAME_DIR/SkyrimSE.exe" 2>/dev/null || true)
 
 if [ -z "$DETECTED_VER" ]; then
-    echo "[!] Warning: Could not detect PE header version from SkyrimSE.exe."
-    echo "    Assuming current Steam runtime: 1.7.104"
-    DETECTED_VER="1.7.104"
+    echo "[-] FATAL: Could not read PE version header from SkyrimSE.exe."
+    echo "    Refusing to proceed with an unverified game executable."
+    exit 1
 fi
 
 echo "[+] Detected Runtime:        $DETECTED_VER"
 
-SKSE_TARGET_VER=""
-SKSE_URL=""
-SKSE_DLL_NAME=""
-
-if [ "$DETECTED_VER" = "1.7.104" ]; then
-    SKSE_TARGET_VER="2.3.1"
-    SKSE_DLL_NAME="skse64_1_7_104.dll"
-    SKSE_URL="https://silverlock.org/download/skse/skse64_2_03_01.7z"
-elif [ "$DETECTED_VER" = "1.6.1170" ]; then
-    SKSE_TARGET_VER="2.2.6"
-    SKSE_DLL_NAME="skse64_1_6_1170.dll"
-    SKSE_URL="https://silverlock.org/download/skse/skse64_2_02_06.7z"
-else
-    echo "[-] Error: Unsupported Skyrim SE runtime version detected: $DETECTED_VER"
-    echo "    Supported runtimes: 1.7.104 (Current Steam) or 1.6.1170 (Legacy)."
-    echo "    Please verify your game files on Steam."
+if [ "$DETECTED_VER" != "$REQUIRED_RUNTIME" ]; then
+    echo "[-] FATAL: Unsupported Skyrim SE runtime version detected: $DETECTED_VER"
+    echo "    This suite strictly targets the current Steam runtime: $REQUIRED_RUNTIME (SKSE $REQUIRED_SKSE_VER)."
+    echo "    Please update Skyrim Special Edition via Steam."
     exit 1
 fi
 
 # 5. Check / Install Matching SKSE Version
 echo ""
 echo "----------------------------------------------------------"
-echo "[*] Checking Skyrim Script Extender (Target: SKSE $SKSE_TARGET_VER for $DETECTED_VER)..."
+echo "[*] Checking Skyrim Script Extender (Target: SKSE $REQUIRED_SKSE_VER for $REQUIRED_RUNTIME)..."
 
 SKSE_VALID=0
-if [ -f "$GAME_DIR/$SKSE_DLL_NAME" ] && [ -f "$GAME_DIR/skse64_loader.exe" ]; then
-    echo "[✓] Verified matching SKSE binary ($SKSE_DLL_NAME) already present in game directory."
+if [ -f "$GAME_DIR/$REQUIRED_SKSE_DLL" ] && [ -f "$GAME_DIR/skse64_loader.exe" ]; then
+    echo "[✓] Verified matching SKSE binary ($REQUIRED_SKSE_DLL) present in game directory."
     SKSE_VALID=1
 fi
 
 if [ "$SKSE_VALID" -eq 0 ]; then
-    echo "[+] Downloading SKSE64 $SKSE_TARGET_VER for runtime $DETECTED_VER..."
+    echo "[+] Downloading SKSE64 $REQUIRED_SKSE_VER for runtime $REQUIRED_RUNTIME..."
     TMP_DIR=$(mktemp -d)
     EXTRACT_SUCCESS=0
 
@@ -172,14 +165,14 @@ if [ "$SKSE_VALID" -eq 0 ]; then
                 mkdir -p "$GAME_DIR/Data"
                 cp -rf "$SKSE_INNER/Data/"* "$GAME_DIR/Data/" 2>/dev/null || true
             fi
-            echo "[✓] SKSE64 $SKSE_TARGET_VER successfully deployed to $GAME_DIR."
+            echo "[✓] SKSE64 $REQUIRED_SKSE_VER successfully deployed to $GAME_DIR."
         fi
     fi
 
     if [ "$EXTRACT_SUCCESS" -ne 1 ]; then
-        echo "[!] Note: Could not auto-download or extract SKSE64."
-        echo "    Please manually download the archive matching your version and put it in ~/Downloads."
-        echo "    deploy_mods.py will install and verify it automatically."
+        echo "[!] Note: Could not auto-download SKSE64."
+        echo "    Please manually download 'skse64_2_03_01.7z' into ~/Downloads."
+        echo "    deploy_mods.py will install and verify it during staging."
     fi
     rm -rf "$TMP_DIR"
 fi
@@ -203,7 +196,6 @@ if [ -f "$CUSTOM_INI" ]; then
     echo "[+] Backed up existing SkyrimCustom.ini to SkyrimCustom.ini.bak"
 fi
 
-# Append or create missing efficiency settings without destroying existing custom bindings
 python3 -c '
 import sys
 from pathlib import Path
@@ -220,7 +212,6 @@ def ensure_section_key(content, section, key, value):
     if sec_header not in content:
         content += f"\n\n{sec_header}\n{key} = {value}"
     else:
-        # Check if key is present
         lines = content.splitlines()
         new_lines = []
         in_sec = False

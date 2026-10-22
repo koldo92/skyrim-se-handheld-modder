@@ -39,7 +39,7 @@ This repository provides:
 * **Modern Third-Person Combat**: Full 360° directional movement, responsive target lock-on reticle, physical Havok weapon hitboxes (*Precision*), and tactical combat AI aggression (*Blade & Blunt*).
 * **Handheld-Tuned UI**: *Dear Diary Dark Mode* high-contrast interface scaled for 7–8" screens, *MCM Helper*, and *Auto Input Switch (1.7.104 edit)* for seamless trackpad/controller integration.
 * **Low-TDP Visuals & Flora**: *Cathedral Landscapes* (which bakes grass textures into terrain meshes to run faster than vanilla grass), *Skyland Architecture 1K*, and *Community Shaders* (configured for Linux / DXVK).
-* **Hardware Frame Pacing**: Injected *SSE Display Tweaks* (`SSEDisplayTweaks.ini`) and *Shadow Boost* profiles ensure physics remain stable at 60 FPS or 120 FPS without Havok bugs.
+* **Hardware Frame Pacing**: Injected *SSE Display Tweaks* custom overrides (`SSEDisplayTweaks_Custom.ini`) ensure physics remain stable at 60 FPS or 120 FPS without Havok bugs, preserving upstream mod defaults.
 
 ---
 
@@ -77,10 +77,12 @@ python3 deploy_mods.py
 ```
 *The deployer will:*
 * Verify runtime 1.7.104 directly from `SkyrimSE.exe`'s PE binary headers.
-* Extract all archives to temporary staging, validate files, and select correct 1.7.104 binaries from FOMOD packages (*PO3 Tweaks*, *Papyrus Extender*).
-* Deploy Engine Fixes Part 2 binaries to the game root and log them in `.handheld_root_manifest.json`.
-* Inject 10W / 60 FPS locked configurations into `SSEDisplayTweaks.ini` and `ShadowBoost.ini`.
-* Generate a dedicated MO2 profile (`Handheld-10W`) with pre-sorted, conflict-resolved `modlist.txt`, `plugins.txt`, and `loadorder.txt`.
+* Run preflight checks to ensure all required archives are present and reject ambiguous duplicate files.
+* Extract all archives to temporary staging, validate files, and select 1.7.104 binaries from FOMOD packages (*PO3 Tweaks*, *Papyrus Extender*).
+* Validate plugin headers (`TES4`) to ensure zero unowned Creation Club master dependencies.
+* Back up existing files and deploy Engine Fixes Part 2 binaries to the game root (logged in `.handheld_root_manifest.json`).
+* Inject validated upstream overrides into `SSEDisplayTweaks_Custom.ini` (60 FPS lock & Havok physics fix).
+* Generate a dedicated MO2 profile (`Handheld-10W`) with a topologically sorted load order (`plugins.txt` and `loadorder.txt`).
 
 ### Step 4: Play in Game Mode
 Return to SteamOS **Game Mode** and launch Skyrim Special Edition!
@@ -98,7 +100,7 @@ The settings below configure an engineered profile designed to sustain 60 FPS wh
 | **High Refresh (Docked)** | **Legion Go S / Ally only** | **25W – 30W** | **Native 1200p / 1080p** | Off | **90 – 120 FPS (VRR)**<br>*(Requires INI tweak)* | Plugged into wall |
 
 > [!NOTE]
-> **Unlocking 120 FPS for Docked Play**: By default, `deploy_mods.py` configures `SSEDisplayTweaks.ini` with `FramerateLimit = 60.0` for thermal and battery consistency. When playing docked on a 120Hz device, open `mods/SSE Display Tweaks/SKSE/Plugins/SSEDisplayTweaks.ini` and set `FramerateLimit = 120.0`.
+> **Unlocking 120 FPS for Docked Play**: By default, `deploy_mods.py` configures `SSEDisplayTweaks_Custom.ini` with `FramerateLimit = 60.0` for thermal and battery consistency. When playing docked on a 120Hz device, open `mods/SSE Display Tweaks/SKSE/Plugins/SSEDisplayTweaks_Custom.ini` and set `FramerateLimit = 120.0`.
 >
 > **Steam Deck Note**: On the Steam Deck, 800p (1280x800) is the screen's native resolution, so SteamOS FSR should be left **Off**. For maximum battery on Steam Deck OLED, locking the refresh rate to **45Hz / 45 FPS** yields 4.5 to 5+ hours of gameplay.
 
@@ -109,11 +111,31 @@ The settings below configure an engineered profile designed to sustain 60 FPS wh
 ```
 ├── setup_handheld_skyrim.sh   # Foundation setup, PE version detection, SKSE, INI merge
 ├── setup_legion_skyrim.sh     # Compatibility alias for Lenovo Legion Go
-├── deploy_mods.py             # Manifest engine, FOMOD resolver, atomic deployer
+├── deploy_mods.py             # Transactional preflight, FOMOD resolver, atomic deployer
 ├── MODS_DOWNLOAD_GUIDE.md     # Audited mod list for 1.7.104 with direct Nexus links
+├── tests/
+│   └── test_suite.py          # Automated verification test suite
 ├── LICENSE                    # MIT License
 └── README.md                  # Project documentation
 ```
+
+### Running Automated Verification Tests
+To run the automated test suite locally:
+```bash
+python3 tests/test_suite.py
+```
+*Validates PE header extraction, TES4 master parsing, Creation Club DLC blocking, topological sorting, and SSEDisplayTweaks custom INI key compliance.*
+
+---
+
+## 📊 Verification & Compatibility Audit (October 22, 2026)
+
+* **Target Game Version**: Skyrim Special Edition `1.7.104` (Steam).
+* **Script Extender**: SKSE64 `2.3.1` (Build `skse64_2_03_01.7z`).
+* **Hardware Profiles**: Validated against AMD Z1 Extreme (Lenovo Legion Go / ROG Ally) and Van Gogh (Steam Deck LCD/OLED).
+* **Performance Note**: 60 FPS and battery figures (~3.0–4.0h) represent an **engineered target profile** based on optimized asset budgets and low-TDP INI scaling. The script sets in-game configurations; players set the SteamOS TDP slider manually.
+* **Auto Input Switch**: Uses the 1.7.104-compatible edit (Nexus #166519, labeled experimental by author).
+* **Shadow Boost**: Removed from preset due to hidden/deprecated upstream status on Nexus.
 
 ---
 

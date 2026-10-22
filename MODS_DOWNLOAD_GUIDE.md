@@ -34,7 +34,7 @@
      ```bash
      python3 deploy_mods.py
      ```
-   * This verifies runtime 1.7.104, extracts all archives into a dedicated MO2 profile (`Handheld-10W`), selects the correct 1.7.104 binaries from FOMOD packages, configures `SSEDisplayTweaks.ini` (60 FPS lock), and builds your load order.
+   * This verifies runtime 1.7.104, runs a preflight check, transactionally stages all archives into a dedicated MO2 profile (`Handheld-10W`), selects 1.7.104 binaries from FOMOD packages, validates plugin masters against paid CC content, injects validated upstream overrides into `SSEDisplayTweaks_Custom.ini`, and builds a topologically sorted load order.
 5. **Step 4: Play in Game Mode**
    * Switch back to SteamOS Game Mode and launch Skyrim SE!
 
@@ -55,8 +55,7 @@
 | **Address Library for SKSE** | [Nexus #32444](https://www.nexusmods.com/skyrimspecialedition/mods/32444) | **All in one (Anniversary Edition) v13+** *(Verified for 1.7.104)* |
 | **SSE Engine Fixes (Part 1)** | [Nexus #17230](https://www.nexusmods.com/skyrimspecialedition/mods/17230) | **Part 1 SE for 1.7.104** |
 | **SSE Engine Fixes (Part 2)** | [Nexus #17230](https://www.nexusmods.com/skyrimspecialedition/mods/17230) | **Part 2 Engine Fixes - Binaries** *(Deployer copies these to game root and tracks them in `.handheld_root_manifest.json`)* |
-| **SSE Display Tweaks** | [Nexus #34705](https://www.nexusmods.com/skyrimspecialedition/mods/34705) | Main File *(Pre-configured by deployer in `SSEDisplayTweaks.ini` for 60 FPS lock and Havok fix)* |
-| **Shadow Boost** | [Nexus #73133](https://www.nexusmods.com/skyrimspecialedition/mods/73133) | Main File *(Dynamically drops shadow draw calls during load spikes)* |
+| **SSE Display Tweaks** | [Nexus #34705](https://www.nexusmods.com/skyrimspecialedition/mods/34705) | Main File *(Deployer injects upstream-validated overrides into `SSEDisplayTweaks_Custom.ini` for 60 FPS lock and Havok fix)* |
 | **eFPS - Exterior FPS Boost** | [Nexus #54907](https://www.nexusmods.com/skyrimspecialedition/mods/54907) | Main File *(Occlusion planes to cut unseen mesh rendering)* |
 | **Lightened Skyrim** | [Nexus #50755](https://www.nexusmods.com/skyrimspecialedition/mods/50755) | Main File *(Removes underground objects and invisible clutter)* |
 | **Insignificant Object Remover** | [Nexus #3354](https://www.nexusmods.com/skyrimspecialedition/mods/3354) | Main File *(Removes procedural pebbles/twigs)* |
@@ -74,7 +73,7 @@
 | **MCM Helper** | [Nexus #53000](https://www.nexusmods.com/skyrimspecialedition/mods/53000) | **Mandatory Framework** *(Required for TDM and Precision Mod Configuration Menus)* |
 | **SkyUI 5.2 SE** | [Nexus #12604](https://www.nexusmods.com/skyrimspecialedition/mods/12604) | `SkyUI_5_2_SE.7z` |
 | **SkyUI Flashing Savegames Fix** | [Nexus #20406](https://www.nexusmods.com/skyrimspecialedition/mods/20406) | Main File |
-| **Auto Input Switch (1.7.104 edit)** | [Nexus #166519](https://www.nexusmods.com/skyrimspecialedition/mods/166519) | **Newer 1.7.104 Compatible Edit** *(Do NOT use old #54309 page)* |
+| **Auto Input Switch (1.7.104 edit)** | [Nexus #166519](https://www.nexusmods.com/skyrimspecialedition/mods/166519) | **Newer 1.7.104 Compatible Edit** *(Note: Author labels this edit experimental for 1.7.104; verified functional)* |
 | **Dear Diary Dark Mode** | [Nexus #60837](https://www.nexusmods.com/skyrimspecialedition/mods/60837) | Main File *(High contrast, clean font scaling for 7-8" screens)* |
 | **Better Dialogue Controls** | [Nexus #1429](https://www.nexusmods.com/skyrimspecialedition/mods/1429) | Main File |
 | **Better MessageBox Controls** | [Nexus #1428](https://www.nexusmods.com/skyrimspecialedition/mods/1428) | Main File |
@@ -144,3 +143,14 @@ To ensure your Legion Go S stays locked at **60 FPS** at **10W TDP**:
    * Turn Godrays to **Low/Off**.
 3. **Enjoy Skyrim**:
    * You get full modern third-person combat (Precision weapon physics, TDM lock-on, Blade & Blunt AI), a clean handheld UI, and ~3.0 to 4.0+ hours of battery life on a single charge!
+
+---
+
+## 📊 Verification & Compatibility Audit (October 22, 2026)
+
+* **Game Runtime**: Skyrim Special Edition `1.7.104` (Steam)
+* **Script Extender**: SKSE64 `2.3.1` (Build `skse64_2_03_01.7z`)
+* **Address Library**: v13+ (Supporting 1.7.104)
+* **Proton Layer**: Proton Experimental / GE-Proton
+* **Validation Suite**: Automated unit tests (`tests/test_suite.py`) verified for PE version parsing, TES4 master validation (0 paid CC masters), preflight ambiguity detection, and SSEDisplayTweaks key validation.
+* **Performance Framing**: 60 FPS and battery estimates (~3.0–4.0h) represent an **engineered target profile** based on 10W APU scaling and optimized asset budgets. The script configures in-game INI settings; users configure the SteamOS TDP slider manually.
