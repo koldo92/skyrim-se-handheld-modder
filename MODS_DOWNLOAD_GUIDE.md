@@ -37,9 +37,12 @@
      ```
    * This verifies runtime 1.7.104, runs a preflight check, transactionally stages all archives into a dedicated MO2 profile (`Handheld-10W`), selects 1.7.104 binaries from FOMOD packages, optimizes `EngineFixes.toml` for handheld stability, validates plugin masters against paid CC content, injects validated upstream overrides into `SSEDisplayTweaks_Custom.ini`, and builds a topologically sorted load order with automatic rollback protection.
 5. **Step 4: Verify Profile & Launch via SKSE**
-   * Switch to Desktop Mode or launch Mod Organizer 2.
-   * Confirm that the active profile dropdown shows **`Handheld-10W`** and the executable dropdown is set to **`SKSE`**.
-   * Launch via SKSE, or switch back to SteamOS Game Mode and launch Skyrim SE via the MO2-configured Steam shortcut!
+   * Switch to Desktop Mode or launch Mod Organizer 2 once to confirm that the active profile is **`Handheld-10W`** and the executable dropdown is set to **`SKSE`**.
+   * **For Direct 1-Click Game Mode Launching**: In Steam Game Mode, go to **Skyrim Special Edition** -> **Properties** -> **General** -> **Launch Options**, and set:
+     ```bash
+     %command% "moshortcut://:SKSE"
+     ```
+   * Clicking **Play** in Steam Game Mode will now auto-launch SKSE directly, loading all mods without showing the MO2 manager GUI!
 
 ---
 

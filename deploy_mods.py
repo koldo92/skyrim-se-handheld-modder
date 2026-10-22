@@ -888,10 +888,10 @@ def topological_sort_plugins(plugins: list, master_map: dict, manifest_priority:
 
     return ordered
 
-# --- Profile Selection in ModOrganizer.ini ---
+# --- Profile & Executable Selection in ModOrganizer.ini ---
 
 def activate_mo2_profile(mo2_dir: Path, profile_name: str):
-    """Updates ModOrganizer.ini so the new profile is actively selected on launch."""
+    """Updates ModOrganizer.ini so the new profile and SKSE executable are actively selected."""
     ini_file = mo2_dir / "ModOrganizer.ini"
     if not ini_file.is_file():
         return
@@ -901,6 +901,7 @@ def activate_mo2_profile(mo2_dir: Path, profile_name: str):
     new_lines = []
     in_general = False
     profile_set = False
+    executable_set = False
 
     for line in lines:
         stripped = line.strip()
@@ -910,23 +911,84 @@ def activate_mo2_profile(mo2_dir: Path, profile_name: str):
             if not profile_set:
                 new_lines.append(f"selected_profile = {profile_name}")
                 profile_set = True
+            if not executable_set:
+                new_lines.append("selected_executable = 1")
+                executable_set = True
             in_general = False
         elif in_general and stripped.startswith("selected_profile"):
             line = f"selected_profile = {profile_name}"
             profile_set = True
+        elif in_general and stripped.startswith("selected_executable"):
+            line = "selected_executable = 1"
+            executable_set = True
 
         new_lines.append(line)
 
     if in_general and not profile_set:
         new_lines.append(f"selected_profile = {profile_name}")
         profile_set = True
+    if in_general and not executable_set:
+        new_lines.append("selected_executable = 1")
+        executable_set = True
 
     if not profile_set:
         new_lines.append("\n[General]")
         new_lines.append(f"selected_profile = {profile_name}")
+        new_lines.append("selected_executable = 1")
 
     ini_file.write_text("\n".join(new_lines) + "\n", encoding="utf-8")
-    print(f"[✓] Configured ModOrganizer.ini: 'selected_profile = {profile_name}'.")
+    print(f"[✓] Configured ModOrganizer.ini: profile '{profile_name}' & SKSE executable selected.")
+
+# --- Direct Auto-Launch Wrapper & Manifest Safeguard ---
+
+def create_direct_launch_wrapper(game_dir: Path, mo2_dir: Path):
+    """Creates launch_skse_direct.sh to enable direct one-click auto-launch via moshortcut."""
+    launcher_script = game_dir / "launch_skse_direct.sh"
+    mo2_exe = mo2_dir / "ModOrganizer.exe"
+    script_content = f"""#!/usr/bin/env bash
+# launch_skse_direct.sh
+# Auto-launches Skyrim SE directly via MO2 + SKSE without opening the manager window.
+
+MO2_EXE="{mo2_exe}"
+if [ -f "$MO2_EXE" ]; then
+    exec "$MO2_EXE" "moshortcut://:SKSE" "$@"
+fi
+"""
+    try:
+        launcher_script.write_text(script_content.strip() + "\n", encoding="utf-8")
+        launcher_script.chmod(0o755)
+        print("[✓] Created: launch_skse_direct.sh (Direct SKSE Auto-Launch wrapper).")
+    except Exception:
+        pass
+
+def freeze_steam_manifest(game_dir: Path) -> bool:
+    """Locks appmanifest_489830.acf to read-only to prevent Steam from auto-updating Skyrim."""
+    candidates = [
+        game_dir.parent.parent / "appmanifest_489830.acf",
+        Path.home() / ".local/share/Steam/steamapps/appmanifest_489830.acf",
+        Path.home() / ".steam/steam/steamapps/appmanifest_489830.acf",
+    ]
+    for c in candidates:
+        if c.is_file():
+            try:
+                c.chmod(0o444)
+                print(f"[✓] Write-protected {c.name}. Steam auto-updates are frozen.")
+                return True
+            except Exception as e:
+                print(f"[-] Warning: Failed to write-protect {c}: {e}")
+    return False
+
+def check_steam_manifest_frozen(game_dir: Path) -> bool:
+    """Checks whether appmanifest_489830.acf is write-protected (read-only)."""
+    candidates = [
+        game_dir.parent.parent / "appmanifest_489830.acf",
+        Path.home() / ".local/share/Steam/steamapps/appmanifest_489830.acf",
+        Path.home() / ".steam/steam/steamapps/appmanifest_489830.acf",
+    ]
+    for c in candidates:
+        if c.is_file():
+            return not os.access(c, os.W_OK)
+    return False
 
 # --- Backup Pruning Helper ---
 
@@ -948,6 +1010,7 @@ def prune_old_backups(backup_root: Path, max_keep: int = 2):
 def main():
     parser = argparse.ArgumentParser(description="Skyrim SE Handheld Mod Deployer for SteamOS")
     parser.add_argument("--no-backup", action="store_true", help="Skip creating permanent historical backups in .handheld_backups to save disk space")
+    parser.add_argument("--freeze-updates", action="store_true", help="Lock appmanifest_489830.acf to read-only to freeze runtime 1.7.104 and block Steam auto-updates")
     args = parser.parse_args()
     no_backup = args.no_backup
 
@@ -965,6 +1028,15 @@ def main():
     print(f"[+] Skyrim Directory:   {game_dir}")
     print(f"[+] Verified Runtime:   {detected_ver}")
     print(f"[+] MO2 Directory:      {mo2_dir}")
+
+    # Check and handle Steam manifest freeze safeguard
+    if check_steam_manifest_frozen(game_dir):
+        print("[✓] Steam Update Safeguard: FROZEN (appmanifest_489830.acf is read-only).")
+    else:
+        print("[!] Steam Update Safeguard: UNLOCKED (run with --freeze-updates to block auto-updates).")
+
+    if args.freeze_updates:
+        freeze_steam_manifest(game_dir)
 
     # 2. Preflight Archive Discovery
     downloads_dirs = [
@@ -1144,6 +1216,9 @@ def main():
             # F. Activate Profile in ModOrganizer.ini
             activate_mo2_profile(mo2_dir, "Handheld-10W")
 
+            # G. Create Direct Auto-Launch Wrapper
+            create_direct_launch_wrapper(game_dir, mo2_dir)
+
         except (Exception, KeyboardInterrupt) as commit_err:
             print(f"\n[-] FATAL: Deployment interrupted or encountered error during commit: {commit_err}")
             print("[*] Initiating automatic rollback to restore previous state...")
@@ -1171,12 +1246,14 @@ def main():
         print("\n==========================================================")
         print("  [★] TRANSACTIONAL DEPLOYMENT COMPLETED SUCCESSFULLY")
         print("==========================================================")
-        print("Profile: 'Handheld-10W' created and set as active in Mod Organizer 2.")
+        print("Profile:  'Handheld-10W' created and set as active in Mod Organizer 2.")
+        print("Launcher: Direct SKSE wrapper generated (launch_skse_direct.sh).")
+        print("          Steam Launch Option for 1-click Game Mode: %command% \"moshortcut://:SKSE\"")
         if no_backup:
-            print("Storage: Running in --no-backup mode (disk usage minimized).")
+            print("Storage:  Running in --no-backup mode (disk usage minimized).")
         else:
-            print("Backups: Preserved in .handheld_backups/ (max 2 revisions kept).")
-        print("Engine:  EngineFixes.toml optimized for handheld storage stability.")
+            print("Backups:  Preserved in .handheld_backups/ (max 2 revisions kept).")
+        print("Engine:   EngineFixes.toml optimized for handheld storage stability.")
         print("Master dependency checks: 100% Passed (0 unowned CC masters).")
 
     finally:

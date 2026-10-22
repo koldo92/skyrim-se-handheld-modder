@@ -92,9 +92,16 @@ python3 deploy_mods.py
 ### Step 4: Verify Profile & Launch via SKSE
 To ensure your new mods and profile are loaded:
 1. **Desktop Mode First Run (Recommended)**: Launch Mod Organizer 2 from Steam or the desktop shortcut created by MO2-LINT.
-2. **Verify Active Profile**: Confirm the profile dropdown in MO2 shows **`Handheld-10W`** (the deployer automatically sets this as active in `ModOrganizer.ini`).
-3. **Verify SKSE Executable**: In the executable dropdown next to the large **Run** button, confirm **`SKSE`** (pointing to `skse64_loader.exe`) is selected. Click **Run** once to verify that Skyrim boots cleanly with SKSE plugins loaded.
-4. **Game Mode Launch**: Return to SteamOS **Game Mode**. If you used MO2-LINT to set up the Steam shortcut / launcher redirect, launching Skyrim Special Edition will directly launch Mod Organizer 2 and SKSE with the active `Handheld-10W` profile.
+2. **Verify Active Profile**: Confirm the profile dropdown in MO2 shows **`Handheld-10W`** and the executable dropdown is set to **`SKSE`** (the deployer automatically pre-configures both in `ModOrganizer.ini`).
+3. **Verify SKSE Executable**: Click **Run** once to verify that Skyrim boots cleanly with SKSE plugins loaded.
+4. **Game Mode Launch (Direct Auto-Launch)**:
+   Return to SteamOS **Game Mode**. To have Skyrim launch directly into SKSE without ever showing the MO2 manager window:
+   * In Steam Game Mode, go to **Skyrim Special Edition** -> **Properties (Gear)** -> **General**.
+   * In **Launch Options**, set:
+     ```bash
+     %command% "moshortcut://:SKSE"
+     ```
+   * Clicking **Play** on Skyrim in Game Mode will now boot directly into your modded game with full Steam overlay, achievements, and controller support!
 
 ---
 

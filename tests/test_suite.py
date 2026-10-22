@@ -25,6 +25,9 @@ from deploy_mods import (
     tune_engine_fixes_config,
     handle_fomod_and_flatten,
     prune_old_backups,
+    freeze_steam_manifest,
+    check_steam_manifest_frozen,
+    create_direct_launch_wrapper,
     ALLOWED_BASE_MASTERS,
     REQUIRED_RUNTIME,
     REQUIRED_SKSE_DLL,
@@ -192,7 +195,48 @@ class TestHandheldSuite(unittest.TestCase):
 
             updated = ini_file.read_text(encoding="utf-8")
             self.assertIn("selected_profile = Handheld-10W", updated)
+            self.assertIn("selected_executable = 1", updated)
             self.assertNotIn("selected_profile = Default", updated)
+
+    def test_create_direct_launch_wrapper(self):
+        """Verifies generation of launch_skse_direct.sh with correct moshortcut argument."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            game_dir = tmp_path / "game"
+            mo2_dir = tmp_path / "mo2"
+            game_dir.mkdir()
+            mo2_dir.mkdir()
+
+            create_direct_launch_wrapper(game_dir, mo2_dir)
+
+            wrapper = game_dir / "launch_skse_direct.sh"
+            self.assertTrue(wrapper.is_file())
+            content = wrapper.read_text(encoding="utf-8")
+            self.assertIn("moshortcut://:SKSE", content)
+            self.assertTrue(bool(wrapper.stat().st_mode & 0o111))
+
+    def test_freeze_steam_manifest(self):
+        """Verifies that freeze_steam_manifest locks appmanifest_489830.acf to read-only."""
+        import os
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            # Create synthetic steamapps structure: tmp_path / "steamapps" / "common" / "Skyrim Special Edition"
+            steamapps = tmp_path / "steamapps"
+            game_dir = steamapps / "common" / "Skyrim Special Edition"
+            game_dir.mkdir(parents=True)
+            manifest = steamapps / "appmanifest_489830.acf"
+            manifest.write_text('"AppState" { "appid" "489830" }', encoding="utf-8")
+
+            # Initially writable
+            self.assertFalse(check_steam_manifest_frozen(game_dir))
+
+            # Freeze manifest
+            success = freeze_steam_manifest(game_dir)
+            self.assertTrue(success)
+            self.assertTrue(check_steam_manifest_frozen(game_dir))
+
+            # Clean up permissions so tempfile can delete directory on exit
+            manifest.chmod(0o644)
 
     def test_tune_engine_fixes_config(self):
         """Verifies that EngineFixes.toml is properly tuned for handheld performance."""

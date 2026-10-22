@@ -296,12 +296,30 @@ done
 
 if [ -n "$MANIFEST_FILE" ]; then
     echo "[+] Found Steam AppManifest: $MANIFEST_FILE"
-    echo "    Bethesda has announced an upcoming Skyrim SE update on Steam."
-    echo "    To freeze your working installation and prevent breaking SKSE 2.3.1:"
-    echo "    1. In Steam Game Mode: Skyrim SE -> Properties -> Updates -> 'Only update when launched'."
-    echo "    2. Optionally write-protect the manifest: chmod 444 \"$MANIFEST_FILE\""
-    echo "       (To re-enable Steam updates later, run: chmod 644 \"$MANIFEST_FILE\")"
+    if [ ! -w "$MANIFEST_FILE" ]; then
+        echo "[✓] Manifest is ALREADY write-protected (Read-only). Steam auto-updates are frozen."
+    else
+        echo "    Bethesda has announced an upcoming Skyrim SE update on Steam."
+        echo "    To freeze your working installation on runtime $REQUIRED_RUNTIME and prevent breaking SKSE:"
+        read -p "    Lock appmanifest_489830.acf to read-only now? [Y/n]: " FREEZE_CHOICE
+        FREEZE_CHOICE="${FREEZE_CHOICE:-Y}"
+        if [[ "$FREEZE_CHOICE" =~ ^[Yy]$ ]]; then
+            chmod 444 "$MANIFEST_FILE"
+            echo "[✓] Locked $MANIFEST_FILE (Read-only). Steam auto-updates are now blocked."
+            echo "    (To unlock in the future, run: chmod 644 \"$MANIFEST_FILE\")"
+        fi
+    fi
 fi
+
+# 9. Direct SKSE Auto-Launch (One-Click Play in Game Mode)
+echo ""
+echo "----------------------------------------------------------"
+echo "[*] Direct SKSE Auto-Launch Setup (Bypass MO2 GUI in Game Mode)..."
+echo "    To launch directly into Skyrim SE + SKSE when pressing 'Play' in Game Mode:"
+echo "    1. In Steam Game Mode: Skyrim Special Edition -> Properties -> General."
+echo "    2. Set Launch Options to:"
+echo "       %command% \"moshortcut://:SKSE\""
+echo "    (When launched, MO2 mounts all mods, boots SKSE, and hides the manager GUI)."
 
 echo ""
 echo "=========================================================="
@@ -310,5 +328,5 @@ echo "=========================================================="
 echo "Next Steps:"
 echo " 1. Consult 'MODS_DOWNLOAD_GUIDE.md' and download the required mods into ~/Downloads."
 echo " 2. Run 'python3 deploy_mods.py' to unpack, organize, and activate the 'Handheld-10W' profile."
-echo " 3. Verify in MO2 that 'Handheld-10W' is active and launch through SKSE!"
+echo " 3. Set the Launch Option above and launch Skyrim SE directly from Steam Game Mode!"
 echo "=========================================================="
