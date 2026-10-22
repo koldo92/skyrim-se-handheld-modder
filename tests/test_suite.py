@@ -28,6 +28,8 @@ from deploy_mods import (
     freeze_steam_manifest,
     check_steam_manifest_frozen,
     create_direct_launch_wrapper,
+    resolve_best_nexus_file,
+    NexusAPIError,
     ALLOWED_BASE_MASTERS,
     REQUIRED_RUNTIME,
     REQUIRED_SKSE_DLL,
@@ -293,6 +295,34 @@ SaveScreenshots = true
             self.assertIn("20261022_100000", remaining)
             self.assertIn("20261022_120000", remaining)
             self.assertNotIn("20261020_000000", remaining)
+
+    def test_manifest_nexus_mod_ids(self):
+        """Verifies that all manifest components define valid Nexus Mod IDs."""
+        for mod in MOD_MANIFEST:
+            mod_id = mod.get("nexus_mod_id")
+            self.assertIsNotNone(mod_id, f"Mod {mod['name']} missing nexus_mod_id")
+            self.assertIsInstance(mod_id, int)
+            self.assertGreater(mod_id, 0)
+
+    def test_resolve_best_nexus_file(self):
+        """Verifies that resolve_best_nexus_file selects the correct file matching patterns & exclusions."""
+        mod_def = {
+            "key": "SkylandArch",
+            "name": "Skyland Architecture (1K)",
+            "patterns": [r"^Skyland.*Architecture.*\.(7z|zip)$"],
+            "exclusions": [r".*2K.*", r".*4K.*"]
+        }
+        mock_files = [
+            {"file_id": 101, "file_name": "Skyland Architecture - 2K.7z", "name": "Skyland Arch 2K", "category_name": "MAIN", "uploaded_timestamp": 100},
+            {"file_id": 102, "file_name": "Skyland Architecture - 4K.7z", "name": "Skyland Arch 4K", "category_name": "MAIN", "uploaded_timestamp": 200},
+            {"file_id": 103, "file_name": "Skyland Architecture - 1K.7z", "name": "Skyland Arch 1K", "category_name": "MAIN", "uploaded_timestamp": 300},
+            {"file_id": 104, "file_name": "Skyland Architecture - 1K Old.7z", "name": "Skyland Arch 1K Old", "category_name": "OLD_VERSION", "uploaded_timestamp": 50}
+        ]
+
+        best = resolve_best_nexus_file(mod_def, mock_files)
+        self.assertIsNotNone(best)
+        self.assertEqual(best["file_id"], 103)
+        self.assertEqual(best["file_name"], "Skyland Architecture - 1K.7z")
 
 if __name__ == "__main__":
     unittest.main()

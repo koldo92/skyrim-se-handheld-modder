@@ -15,6 +15,15 @@
 
 ## Quick Start: The 4-Step Workflow
 
+> [!TIP]
+> **Nexus Mods Premium Users (100% Automated 1-Click Mode)**:  
+> If you have an active Nexus Premium membership, you don't need to download these files manually!  
+> Simply run:
+> ```bash
+> python3 deploy_mods.py --nexus-key "YOUR_NEXUS_API_KEY"
+> ```
+> *(Or enter your API key when prompted by `./setup_handheld_skyrim.sh`).* The script will automatically authenticate, download all curated 1.7.104 files via uncapped CDN, and complete deployment in 2–3 minutes.
+
 1. **Step 0: Game Preparation**
    * Install Skyrim SE via Steam.
    * Launch the game **once** in SteamOS Game Mode, reach the main menu, and exit.  

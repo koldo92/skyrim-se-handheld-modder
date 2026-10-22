@@ -325,7 +325,23 @@ echo ""
 echo "=========================================================="
 echo "  Setup Step Complete!"
 echo "=========================================================="
-echo "Next Steps:"
+echo ""
+read -p "Do you have a Nexus Mods Premium account? [y/N]: " HAS_PREMIUM
+if [[ "$HAS_PREMIUM" =~ ^[Yy]$ ]]; then
+    echo ""
+    echo "  You can get your Personal API Key from:"
+    echo "  https://www.nexusmods.com/users/myaccount?tab=api"
+    echo ""
+    read -p "  Enter your Nexus Personal API Key: " USER_NEXUS_KEY
+    if [ -n "$USER_NEXUS_KEY" ]; then
+        echo ""
+        echo "[*] Launching 100% automated Nexus Premium download & deployment..."
+        python3 deploy_mods.py --nexus-key "$USER_NEXUS_KEY"
+        exit 0
+    fi
+fi
+
+echo "Next Steps (Free Nexus Account):"
 echo " 1. Consult 'MODS_DOWNLOAD_GUIDE.md' and download the required mods into ~/Downloads."
 echo " 2. Run 'python3 deploy_mods.py' to unpack, organize, and activate the 'Handheld-10W' profile."
 echo " 3. Set the Launch Option above and launch Skyrim SE directly from Steam Game Mode!"

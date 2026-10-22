@@ -65,13 +65,25 @@ This repository provides:
    *This detects your Steam library (SSD or MicroSD), validates your runtime (`1.7.104`), installs SKSE (`2.3.1`), safely merges low-TDP settings into `SkyrimCustom.ini` (with a `.bak` backup), and guides MO2 setup via the maintained [MO2-LINT](https://github.com/Furglitch/modorganizer2-linux-installer) installer.*
 
 ### Step 2: Download the Mod Archives
-Open your browser in Desktop Mode and download the curated mods into your default `~/Downloads` folder.  
-👉 **Follow the [Mod Download Guide (MODS_DOWNLOAD_GUIDE.md)](MODS_DOWNLOAD_GUIDE.md) for direct links and 1.7.104 audit notes.**
 
-*(You only need a free Nexus account. Click **Manual Download** -> **Slow Download**).*
+#### Option A: Nexus Mods Premium (100% Automated "One-Click" Mode)
+If you have an active Nexus Mods Premium account, you can skip manual downloads entirely!
+1. Copy your Personal API Key from [Nexus API Settings](https://www.nexusmods.com/users/myaccount?tab=api).
+2. Run the deployer with your key:
+   ```bash
+   python3 deploy_mods.py --nexus-key "YOUR_API_KEY_HERE"
+   # Or set: export NEXUS_API_KEY="YOUR_KEY" && python3 deploy_mods.py
+   ```
+   *The script will automatically authenticate, download all verified 1.7.104 archives in parallel via uncapped CDN into `~/Downloads`, and immediately transition to staging, load order generation, and profile deployment.*
+
+#### Option B: Free Nexus Account (Manual Downloads)
+Open your browser in Desktop Mode and download the curated mods into your default `~/Downloads` folder.  
+👉 **Follow the [Mod Download Guide (MODS_DOWNLOAD_GUIDE.md)](MODS_DOWNLOAD_GUIDE.md) for direct links and 1.7.104 audit notes.**  
+*(Click **Manual Download** -> **Slow Download** on each file).*
 
 ### Step 3: Run the Deploy Script
-Once your downloads finish, run:
+*(If you used Option A with `--nexus-key`, this step runs automatically!).*  
+For manual downloads, once finished, run:
 ```bash
 python3 deploy_mods.py
 # (Or: python3 deploy_mods.py --no-backup to save disk space on small storage drives)

@@ -16,6 +16,8 @@ import struct
 import datetime
 import argparse
 import subprocess
+import urllib.request
+import urllib.error
 from pathlib import Path
 
 # --- Shared Target Definition ---
@@ -42,6 +44,7 @@ MOD_MANIFEST = [
     {
         "key": "SKSE",
         "name": "Skyrim Script Extender 64",
+        "nexus_mod_id": 30379,
         "patterns": [r"^skse64_2_03_01.*\.7z$"],
         "exclusions": [],
         "is_root": True,
@@ -52,6 +55,7 @@ MOD_MANIFEST = [
     {
         "key": "EngineFixesPart2",
         "name": "Engine Fixes - Part 2 (Binaries)",
+        "nexus_mod_id": 17230,
         "patterns": [r"^.*(EngineFixes.*Part2|Engine.*Fixes.*Part.*2|EngineFixes.*Binaries).*\.(7z|zip|rar)$"],
         "exclusions": [r".*Part1.*"],
         "is_root": True,
@@ -62,6 +66,7 @@ MOD_MANIFEST = [
     {
         "key": "AddressLibrary",
         "name": "Address Library for SKSE Plugins",
+        "nexus_mod_id": 32444,
         "patterns": [r"^.*(All in one.*Anniversary|Address.*Library.*Anniversary|AddressLibrary).*\.(7z|zip)$"],
         "exclusions": [r".*GOG.*", r".*VR.*"],
         "is_root": False,
@@ -72,6 +77,7 @@ MOD_MANIFEST = [
     {
         "key": "EngineFixes",
         "name": "SSE Engine Fixes",
+        "nexus_mod_id": 17230,
         "patterns": [r"^.*(Part.*1.*Engine.*Fixes|Engine.*Fixes.*Part.*1|EngineFixes).*\.(7z|zip)$"],
         "exclusions": [r".*Part2.*", r".*Binaries.*"],
         "is_root": False,
@@ -82,6 +88,7 @@ MOD_MANIFEST = [
     {
         "key": "DisplayTweaks",
         "name": "SSE Display Tweaks",
+        "nexus_mod_id": 34705,
         "patterns": [r"^SSE.*Display.*Tweaks.*\.(7z|zip)$"],
         "exclusions": [],
         "is_root": False,
@@ -92,6 +99,7 @@ MOD_MANIFEST = [
     {
         "key": "eFPS",
         "name": "eFPS - Exterior FPS Boost",
+        "nexus_mod_id": 54907,
         "patterns": [r"^eFPS.*Official.*\.(7z|zip)$", r"^eFPS.*\.(7z|zip)$"],
         "exclusions": [r".*Patch.*", r".*JK.*"],
         "is_root": False,
@@ -102,6 +110,7 @@ MOD_MANIFEST = [
     {
         "key": "LightenedSkyrim",
         "name": "Lightened Skyrim",
+        "nexus_mod_id": 50755,
         "patterns": [r"^Lightened.*Skyrim.*\.(7z|zip)$"],
         "exclusions": [r".*CC.*", r".*CreationClub.*", r".*Patch.*"],
         "is_root": False,
@@ -112,6 +121,7 @@ MOD_MANIFEST = [
     {
         "key": "InsignificantObjectRemover",
         "name": "Insignificant Object Remover",
+        "nexus_mod_id": 3354,
         "patterns": [r"^Insignificant.*Object.*Remover.*\.(7z|zip)$"],
         "exclusions": [],
         "is_root": False,
@@ -122,6 +132,7 @@ MOD_MANIFEST = [
     {
         "key": "PO3Tweaks",
         "name": "powerofthree's Tweaks",
+        "nexus_mod_id": 51073,
         "patterns": [r"^(po3_Tweaks|powerofthree.*Tweaks).*\.(7z|zip)$"],
         "exclusions": [],
         "is_root": False,
@@ -133,6 +144,7 @@ MOD_MANIFEST = [
     {
         "key": "PO3Papyrus",
         "name": "powerofthree's Papyrus Extender",
+        "nexus_mod_id": 22854,
         "patterns": [r"^(Papyrus.*Extender|po3_PapyrusExtender).*\.(7z|zip)$"],
         "exclusions": [],
         "is_root": False,
@@ -144,6 +156,7 @@ MOD_MANIFEST = [
     {
         "key": "BugFixesSSE",
         "name": "Bug Fixes SSE",
+        "nexus_mod_id": 33261,
         "patterns": [r"^BugFixesSSE.*\.(7z|zip)$"],
         "exclusions": [],
         "is_root": False,
@@ -154,6 +167,7 @@ MOD_MANIFEST = [
     {
         "key": "ScrambledBugs",
         "name": "Scrambled Bugs",
+        "nexus_mod_id": 43532,
         "patterns": [r"^ScrambledBugs.*\.(7z|zip)$"],
         "exclusions": [],
         "is_root": False,
@@ -164,6 +178,7 @@ MOD_MANIFEST = [
     {
         "key": "MCMHelper",
         "name": "MCM Helper",
+        "nexus_mod_id": 53000,
         "patterns": [r"^MCM.*Helper.*\.(7z|zip)$"],
         "exclusions": [r".*VR.*"],
         "is_root": False,
@@ -174,6 +189,7 @@ MOD_MANIFEST = [
     {
         "key": "SkyUI",
         "name": "SkyUI 5.2 SE",
+        "nexus_mod_id": 12604,
         "patterns": [r"^SkyUI_5_2_SE.*\.(7z|zip)$"],
         "exclusions": [],
         "is_root": False,
@@ -184,6 +200,7 @@ MOD_MANIFEST = [
     {
         "key": "SkyUIFix",
         "name": "SkyUI Flashing Savegames Fix",
+        "nexus_mod_id": 20406,
         "patterns": [r"^Flashing.*Savegames.*Fix.*\.(7z|zip)$"],
         "exclusions": [],
         "is_root": False,
@@ -194,6 +211,7 @@ MOD_MANIFEST = [
     {
         "key": "AutoInputSwitch",
         "name": "Auto Input Switch (1.7.104 Edit)",
+        "nexus_mod_id": 166519,
         "patterns": [r"^AutoInputSwitch.*(166519|1\.7\.104).*\.(7z|zip)$"],
         "exclusions": [],
         "is_root": False,
@@ -204,6 +222,7 @@ MOD_MANIFEST = [
     {
         "key": "DearDiaryDark",
         "name": "Dear Diary Dark Mode",
+        "nexus_mod_id": 60837,
         "patterns": [r"^(Dear.*Diary.*Dark|DearDiaryDark).*\.(7z|zip)$"],
         "exclusions": [r".*Patch.*", r".*Addon.*"],
         "is_root": False,
@@ -214,6 +233,7 @@ MOD_MANIFEST = [
     {
         "key": "BetterDialogue",
         "name": "Better Dialogue Controls",
+        "nexus_mod_id": 1429,
         "patterns": [r"^Better.*Dialogue.*Controls.*\.(7z|zip)$"],
         "exclusions": [],
         "is_root": False,
@@ -224,6 +244,7 @@ MOD_MANIFEST = [
     {
         "key": "BetterMessageBox",
         "name": "Better MessageBox Controls",
+        "nexus_mod_id": 1428,
         "patterns": [r"^Better.*MessageBox.*Controls.*\.(7z|zip)$"],
         "exclusions": [],
         "is_root": False,
@@ -234,6 +255,7 @@ MOD_MANIFEST = [
     {
         "key": "ContextualCrosshair",
         "name": "Contextual Crosshair",
+        "nexus_mod_id": 63980,
         "patterns": [r"^Contextual.*Crosshair.*\.(7z|zip)$"],
         "exclusions": [],
         "is_root": False,
@@ -244,6 +266,7 @@ MOD_MANIFEST = [
     {
         "key": "TDM",
         "name": "True Directional Movement",
+        "nexus_mod_id": 51614,
         "patterns": [r"^TrueDirectionalMovement.*\.(7z|zip)$"],
         "exclusions": [],
         "is_root": False,
@@ -254,6 +277,7 @@ MOD_MANIFEST = [
     {
         "key": "SmoothCam",
         "name": "SmoothCam",
+        "nexus_mod_id": 41636,
         "patterns": [r"^SmoothCam.*\.(7z|zip)$"],
         "exclusions": [r".*Preset.*"],
         "is_root": False,
@@ -264,6 +288,7 @@ MOD_MANIFEST = [
     {
         "key": "SmoothCamPreset",
         "name": "SmoothCam Handheld Preset",
+        "nexus_mod_id": 72014,
         "patterns": [r"^(Galaduz|ModernCamera|SmoothCam.*Preset).*\.(7z|zip)$"],
         "exclusions": [],
         "is_root": False,
@@ -274,6 +299,7 @@ MOD_MANIFEST = [
     {
         "key": "Precision",
         "name": "Precision - Accurate Melee Collisions",
+        "nexus_mod_id": 72347,
         "patterns": [r"^Precision.*\.(7z|zip)$"],
         "exclusions": [r".*Creatures.*", r".*Patch.*"],
         "is_root": False,
@@ -284,6 +310,7 @@ MOD_MANIFEST = [
     {
         "key": "MortalEnemies",
         "name": "Mortal Enemies SE",
+        "nexus_mod_id": 4881,
         "patterns": [r"^Mortal.*Enemies.*\.(7z|zip)$"],
         "exclusions": [r".*Rival.*"],
         "is_root": False,
@@ -294,6 +321,7 @@ MOD_MANIFEST = [
     {
         "key": "SimpleDualSheath",
         "name": "Simple Dual Sheath",
+        "nexus_mod_id": 49710,
         "patterns": [r"^SimpleDualSheath.*\.(7z|zip)$"],
         "exclusions": [],
         "is_root": False,
@@ -304,6 +332,7 @@ MOD_MANIFEST = [
     {
         "key": "CathedralLandscapes",
         "name": "Cathedral Landscapes (1K)",
+        "nexus_mod_id": 21954,
         "patterns": [r"^Cathedral.*Landscapes.*\.(7z|zip)$"],
         "exclusions": [r".*HD.*", r".*2K.*", r".*4K.*"],
         "is_root": False,
@@ -314,6 +343,7 @@ MOD_MANIFEST = [
     {
         "key": "SkylandArch",
         "name": "Skyland Architecture (1K)",
+        "nexus_mod_id": 3820,
         "patterns": [r"^Skyland.*Architecture.*\.(7z|zip)$"],
         "exclusions": [r".*2K.*", r".*4K.*"],
         "is_root": False,
@@ -324,6 +354,7 @@ MOD_MANIFEST = [
     {
         "key": "CathedralWeathers",
         "name": "Cathedral Weathers and Seasons",
+        "nexus_mod_id": 24791,
         "patterns": [r"^Cathedral.*Weathers.*\.(7z|zip)$"],
         "exclusions": [r".*Patch.*", r".*Diversified.*"],
         "is_root": False,
@@ -334,6 +365,7 @@ MOD_MANIFEST = [
     {
         "key": "CommunityShaders",
         "name": "Community Shaders",
+        "nexus_mod_id": 86492,
         "patterns": [r"^CommunityShaders.*\.(7z|zip)$"],
         "exclusions": [],
         "is_root": False,
@@ -344,6 +376,7 @@ MOD_MANIFEST = [
     {
         "key": "SimplicityOfSnow",
         "name": "Simplicity of Snow",
+        "nexus_mod_id": 56235,
         "patterns": [r"^Simplicity.*of.*Snow.*\.(7z|zip)$"],
         "exclusions": [r".*Patch.*"],
         "is_root": False,
@@ -354,6 +387,7 @@ MOD_MANIFEST = [
     {
         "key": "HD_Audio",
         "name": "Unofficial High Definition Audio",
+        "nexus_mod_id": 18115,
         "patterns": [r"^(High.*Definition.*Audio|Audio.*Project).*\.(7z|zip)$"],
         "exclusions": [],
         "is_root": False,
@@ -364,6 +398,7 @@ MOD_MANIFEST = [
     {
         "key": "Mysticism",
         "name": "Mysticism - The Magic Overhaul",
+        "nexus_mod_id": 27839,
         "patterns": [r"^Mysticism.*Magic.*Overhaul.*\.(7z|zip)$", r"^Mysticism.*\.(7z|zip)$"],
         "exclusions": [r".*CC.*", r".*CreationClub.*", r".*Patch.*"],
         "is_root": False,
@@ -374,6 +409,7 @@ MOD_MANIFEST = [
     {
         "key": "Adamant",
         "name": "Adamant - A Perk Overhaul",
+        "nexus_mod_id": 30191,
         "patterns": [r"^Adamant.*Perk.*Overhaul.*\.(7z|zip)$", r"^Adamant.*\.(7z|zip)$"],
         "exclusions": [r".*CC.*", r".*CreationClub.*", r".*Patch.*"],
         "is_root": False,
@@ -384,6 +420,7 @@ MOD_MANIFEST = [
     {
         "key": "BladeAndBlunt",
         "name": "Blade & Blunt - A Combat Overhaul",
+        "nexus_mod_id": 34549,
         "patterns": [r"^(Blade.*and.*Blunt|BladeAndBlunt).*\.(7z|zip)$"],
         "exclusions": [r".*CC.*", r".*Patch.*"],
         "is_root": False,
@@ -394,6 +431,7 @@ MOD_MANIFEST = [
     {
         "key": "Aetherius",
         "name": "Aetherius - A Race Overhaul",
+        "nexus_mod_id": 26686,
         "patterns": [r"^Aetherius.*\.(7z|zip)$"],
         "exclusions": [r".*CC.*", r".*Patch.*"],
         "is_root": False,
@@ -404,6 +442,7 @@ MOD_MANIFEST = [
     {
         "key": "Mundus",
         "name": "Mundus - A Standing Stone Overhaul",
+        "nexus_mod_id": 33411,
         "patterns": [r"^Mundus.*\.(7z|zip)$"],
         "exclusions": [r".*CC.*", r".*Patch.*"],
         "is_root": False,
@@ -414,6 +453,7 @@ MOD_MANIFEST = [
     {
         "key": "Scion",
         "name": "Scion - A Vampire Overhaul",
+        "nexus_mod_id": 41639,
         "patterns": [r"^Scion.*\.(7z|zip)$"],
         "exclusions": [r".*Patch.*"],
         "is_root": False,
@@ -424,6 +464,7 @@ MOD_MANIFEST = [
     {
         "key": "Manbeast",
         "name": "Manbeast - A Werewolf Overhaul",
+        "nexus_mod_id": 44746,
         "patterns": [r"^Manbeast.*\.(7z|zip)$"],
         "exclusions": [r".*Patch.*"],
         "is_root": False,
@@ -434,6 +475,7 @@ MOD_MANIFEST = [
     {
         "key": "Apothecary",
         "name": "Apothecary - An Alchemy Overhaul",
+        "nexus_mod_id": 52130,
         "patterns": [r"^Apothecary.*\.(7z|zip)$"],
         "exclusions": [r".*CC.*", r".*Patch.*"],
         "is_root": False,
@@ -444,6 +486,7 @@ MOD_MANIFEST = [
     {
         "key": "Arena",
         "name": "Arena - An Encounter Zone Overhaul",
+        "nexus_mod_id": 33403,
         "patterns": [r"^Arena.*\.(7z|zip)$"],
         "exclusions": [r".*Patch.*"],
         "is_root": False,
@@ -452,6 +495,226 @@ MOD_MANIFEST = [
         "required_files": ["Arena.esp"]
     }
 ]
+
+# --- Nexus Mods Premium API Downloader ---
+
+class NexusAPIError(Exception):
+    pass
+
+def validate_nexus_api_key(api_key: str) -> dict:
+    """Validates the Nexus Mods Personal API key and checks Premium status."""
+    url = "https://api.nexusmods.com/v1/users/validate.json"
+    req = urllib.request.Request(
+        url,
+        headers={
+            "apikey": api_key,
+            "User-Agent": "SkyrimHandheldModder/1.0",
+            "accept": "application/json"
+        }
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+            return data
+    except urllib.error.HTTPError as e:
+        if e.code == 401:
+            raise NexusAPIError("Invalid Nexus Mods API Key. Please verify your key at https://www.nexusmods.com/users/myaccount?tab=api")
+        elif e.code == 403:
+            raise NexusAPIError("Nexus API access forbidden. Please check your account permissions.")
+        else:
+            raise NexusAPIError(f"Nexus API error (HTTP {e.code}): {e.reason}")
+    except Exception as e:
+        raise NexusAPIError(f"Could not connect to Nexus API: {e}")
+
+def get_nexus_mod_files(mod_id: int, api_key: str) -> list:
+    """Fetches list of file releases for a given mod from Nexus API."""
+    url = f"https://api.nexusmods.com/v1/games/skyrimspecialedition/mods/{mod_id}/files.json"
+    req = urllib.request.Request(
+        url,
+        headers={
+            "apikey": api_key,
+            "User-Agent": "SkyrimHandheldModder/1.0",
+            "accept": "application/json"
+        }
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=20) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+            return data.get("files", [])
+    except Exception as e:
+        raise NexusAPIError(f"Failed to fetch files for mod #{mod_id}: {e}")
+
+def resolve_best_nexus_file(mod_def: dict, files_list: list) -> dict:
+    """Matches the manifest patterns and exclusions against Nexus file listings."""
+    patterns = mod_def["patterns"]
+    exclusions = mod_def.get("exclusions", [])
+
+    candidates = []
+    for f in files_list:
+        file_name = f.get("file_name", "")
+        name = f.get("name", "")
+        if any(re.search(ex, file_name, re.IGNORECASE) or re.search(ex, name, re.IGNORECASE) for ex in exclusions):
+            continue
+        if any(re.search(p, file_name, re.IGNORECASE) or re.search(p, name, re.IGNORECASE) for p in patterns):
+            candidates.append(f)
+
+    if not candidates:
+        main_files = [f for f in files_list if f.get("category_name") == "MAIN" and not any(
+            re.search(ex, f.get("file_name", ""), re.IGNORECASE) or re.search(ex, f.get("name", ""), re.IGNORECASE) for ex in exclusions
+        )]
+        if main_files:
+            candidates = main_files
+
+    if not candidates:
+        return None
+
+    candidates.sort(key=lambda x: (
+        1 if x.get("category_name") == "MAIN" else 0,
+        1 if x.get("is_primary") else 0,
+        x.get("uploaded_timestamp", 0)
+    ), reverse=True)
+
+    return candidates[0]
+
+def get_nexus_download_url(mod_id: int, file_id: int, api_key: str) -> str:
+    """Retrieves direct CDN download URL for a file from Nexus API."""
+    url = f"https://api.nexusmods.com/v1/games/skyrimspecialedition/mods/{mod_id}/files/{file_id}/download_link.json"
+    req = urllib.request.Request(
+        url,
+        headers={
+            "apikey": api_key,
+            "User-Agent": "SkyrimHandheldModder/1.0",
+            "accept": "application/json"
+        }
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=20) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+            if data and isinstance(data, list) and "URI" in data[0]:
+                return data[0]["URI"]
+            raise NexusAPIError(f"No CDN mirrors returned for file #{file_id}")
+    except urllib.error.HTTPError as e:
+        if e.code == 403:
+            raise NexusAPIError("Nexus returned 403 Forbidden on download_link. This endpoint requires an active Nexus Premium subscription.")
+        raise NexusAPIError(f"Failed to fetch download link (HTTP {e.code}): {e.reason}")
+    except Exception as e:
+        raise NexusAPIError(f"Error retrieving download link: {e}")
+
+def download_file_with_progress(url: str, dest_path: Path, display_name: str):
+    """Downloads a file with clean progress reporting."""
+    req = urllib.request.Request(url, headers={"User-Agent": "SkyrimHandheldModder/1.0"})
+    temp_path = dest_path.with_suffix(dest_path.suffix + ".part")
+    dest_path.parent.mkdir(parents=True, exist_ok=True)
+
+    with urllib.request.urlopen(req, timeout=60) as resp:
+        total_size = int(resp.headers.get("Content-Length", 0))
+        downloaded = 0
+        chunk_size = 1024 * 512
+
+        with open(temp_path, "wb") as f:
+            while True:
+                chunk = resp.read(chunk_size)
+                if not chunk:
+                    break
+                f.write(chunk)
+                downloaded += len(chunk)
+                if total_size > 0:
+                    pct = (downloaded / total_size) * 100
+                    mb_cur = downloaded / (1024 * 1024)
+                    mb_tot = total_size / (1024 * 1024)
+                    print(f"\r    [{pct:5.1f}%] {mb_cur:.1f}/{mb_tot:.1f} MB: {display_name}", end="", flush=True)
+                else:
+                    mb_cur = downloaded / (1024 * 1024)
+                    print(f"\r    {mb_cur:.1f} MB: {display_name}", end="", flush=True)
+        print()
+
+    temp_path.rename(dest_path)
+
+def auto_download_premium_preset(api_key: str, downloads_dir: Path, game_dir: Path):
+    """Orchestrates automated downloading of all required mods for Nexus Premium users."""
+    print("\n==========================================================")
+    print("  Nexus Mods Premium: Automated Fast-Track Downloader")
+    print("==========================================================")
+    user_info = validate_nexus_api_key(api_key)
+    username = user_info.get("name", "Unknown")
+    is_premium = user_info.get("is_premium", False)
+
+    print(f"[+] Authenticated: {username}")
+    if not is_premium:
+        print("[-] FATAL: Account is NOT Premium.")
+        print("    Automated API downloads require an active Nexus Mods Premium subscription.")
+        print("    Please follow 'MODS_DOWNLOAD_GUIDE.md' to download the mods manually.")
+        sys.exit(1)
+
+    print("[✓] Premium status: ACTIVE (Uncapped high-speed CDN enabled).")
+
+    existing_archives = [f for f in downloads_dir.iterdir() if f.is_file() and f.suffix.lower() in [".zip", ".7z", ".rar"]] if downloads_dir.is_dir() else []
+    skse_installed = (game_dir / REQUIRED_SKSE_DLL).is_file() and (game_dir / "skse64_loader.exe").is_file()
+
+    to_download = []
+    for mod in MOD_MANIFEST:
+        key = mod["key"]
+        patterns = mod["patterns"]
+        exclusions = mod.get("exclusions", [])
+
+        if key == "SKSE" and skse_installed:
+            continue
+
+        already_downloaded = False
+        for arch in existing_archives:
+            fname = arch.name
+            if any(re.search(ex, fname, re.IGNORECASE) for ex in exclusions):
+                continue
+            if any(re.search(p, fname, re.IGNORECASE) for p in patterns):
+                already_downloaded = True
+                break
+
+        if not already_downloaded:
+            to_download.append(mod)
+
+    if not to_download:
+        print("[✓] All preset archives already exist in download folder! Proceeding to deployment...")
+        return
+
+    print(f"[*] Found {len(to_download)} mod archive(s) to download.")
+
+    for idx, mod in enumerate(to_download, 1):
+        name = mod["name"]
+        key = mod["key"]
+        mod_id = mod.get("nexus_mod_id")
+
+        print(f"\n[{idx}/{len(to_download)}] Fetching: {name}...")
+
+        if key == "SKSE":
+            skse_url = "https://silverlock.org/download/skse/skse64_2_03_01.7z"
+            dest = downloads_dir / "skse64_2_03_01.7z"
+            print(f"    -> Downloading SKSE 2.3.1 from official Silverlock mirror...")
+            download_file_with_progress(skse_url, dest, "skse64_2_03_01.7z")
+            continue
+
+        if not mod_id:
+            print(f"    [-] Skipping {name}: No Nexus Mod ID defined.")
+            continue
+
+        try:
+            files = get_nexus_mod_files(mod_id, api_key)
+            best_file = resolve_best_nexus_file(mod, files)
+            if not best_file:
+                print(f"    [-] Warning: Could not find matching file on Nexus for {name} (Mod #{mod_id}).")
+                continue
+
+            file_id = best_file["file_id"]
+            file_name = best_file["file_name"]
+            dest = downloads_dir / file_name
+
+            dl_url = get_nexus_download_url(mod_id, file_id, api_key)
+            print(f"    -> Downloading {file_name} via Nexus CDN...")
+            download_file_with_progress(dl_url, dest, file_name)
+        except Exception as e:
+            print(f"    [-] Error downloading {name}: {e}")
+            raise
+
+    print("\n[✓] All automated downloads completed successfully!")
 
 # --- PE Binary Header Inspector ---
 
@@ -1011,13 +1274,16 @@ def main():
     parser = argparse.ArgumentParser(description="Skyrim SE Handheld Mod Deployer for SteamOS")
     parser.add_argument("--no-backup", action="store_true", help="Skip creating permanent historical backups in .handheld_backups to save disk space")
     parser.add_argument("--freeze-updates", action="store_true", help="Lock appmanifest_489830.acf to read-only to freeze runtime 1.7.104 and block Steam auto-updates")
+    parser.add_argument("--nexus-key", default=os.environ.get("NEXUS_API_KEY"), help="Nexus Mods Personal API Key for automated Premium downloads")
     args = parser.parse_args()
     no_backup = args.no_backup
 
     print("==========================================================")
     print("  Skyrim SE Handheld Mod Deployer for SteamOS")
     print(f"  Target: Skyrim SE {REQUIRED_RUNTIME} (Strict) | SKSE {REQUIRED_SKSE_VERSION}")
-    if no_backup:
+    if args.nexus_key:
+        print("  Mode: Nexus Mods Premium (Automated Download & Install)")
+    elif no_backup:
         print("  Mode: Low Storage Space (--no-backup active)")
     print("==========================================================")
 
@@ -1038,7 +1304,12 @@ def main():
     if args.freeze_updates:
         freeze_steam_manifest(game_dir)
 
-    # 2. Preflight Archive Discovery
+    # 2. Nexus Mods Premium Automated Downloads (If API Key provided)
+    if args.nexus_key:
+        downloads_dir = Path.home() / "Downloads"
+        auto_download_premium_preset(args.nexus_key, downloads_dir, game_dir)
+
+    # 3. Preflight Archive Discovery
     downloads_dirs = [
         Path.home() / "Downloads",
         Path.cwd() / "mod_downloads",
