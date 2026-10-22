@@ -299,14 +299,18 @@ if [ -n "$MANIFEST_FILE" ]; then
     if [ ! -w "$MANIFEST_FILE" ]; then
         echo "[✓] Manifest is ALREADY write-protected (Read-only). Steam auto-updates are frozen."
     else
+        ORIG_PERMS=$(stat -c "%a" "$MANIFEST_FILE" 2>/dev/null || stat -f "%Lp" "$MANIFEST_FILE" 2>/dev/null || echo "644")
         echo "    Bethesda has announced an upcoming Skyrim SE update on Steam."
         echo "    To freeze your working installation on runtime $REQUIRED_RUNTIME and prevent breaking SKSE:"
+        echo "    (Note: Locking to read-only stops automatic updates, but Steam may display a"
+        echo "     'Disk write error' or paused state when queued. Manual verify will bypass this)."
         read -p "    Lock appmanifest_489830.acf to read-only now? [Y/n]: " FREEZE_CHOICE
         FREEZE_CHOICE="${FREEZE_CHOICE:-Y}"
         if [[ "$FREEZE_CHOICE" =~ ^[Yy]$ ]]; then
+            echo "$ORIG_PERMS" > "${MANIFEST_FILE}.orig_mode" 2>/dev/null || true
             chmod 444 "$MANIFEST_FILE"
-            echo "[✓] Locked $MANIFEST_FILE (Read-only). Steam auto-updates are now blocked."
-            echo "    (To unlock in the future, run: chmod 644 \"$MANIFEST_FILE\")"
+            echo "[✓] Locked $MANIFEST_FILE (Read-only; original mode: $ORIG_PERMS)."
+            echo "    (To unlock and restore permissions later, run: chmod $ORIG_PERMS \"$MANIFEST_FILE\")"
         fi
     fi
 fi
@@ -332,11 +336,13 @@ if [[ "$HAS_PREMIUM" =~ ^[Yy]$ ]]; then
     echo "  You can get your Personal API Key from:"
     echo "  https://www.nexusmods.com/users/myaccount?tab=api"
     echo ""
-    read -p "  Enter your Nexus Personal API Key: " USER_NEXUS_KEY
+    read -s -p "  Enter your Nexus Personal API Key (input hidden): " USER_NEXUS_KEY
+    echo ""
     if [ -n "$USER_NEXUS_KEY" ]; then
         echo ""
         echo "[*] Launching 100% automated Nexus Premium download & deployment..."
-        python3 deploy_mods.py --nexus-key "$USER_NEXUS_KEY"
+        NEXUS_API_KEY="$USER_NEXUS_KEY" python3 deploy_mods.py
+        unset USER_NEXUS_KEY
         exit 0
     fi
 fi

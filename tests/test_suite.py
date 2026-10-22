@@ -26,10 +26,12 @@ from deploy_mods import (
     handle_fomod_and_flatten,
     prune_old_backups,
     freeze_steam_manifest,
+    unfreeze_steam_manifest,
     check_steam_manifest_frozen,
     create_direct_launch_wrapper,
     resolve_best_nexus_file,
     NexusAPIError,
+    PluginParseError,
     ALLOWED_BASE_MASTERS,
     REQUIRED_RUNTIME,
     REQUIRED_SKSE_DLL,
@@ -323,6 +325,98 @@ SaveScreenshots = true
         self.assertIsNotNone(best)
         self.assertEqual(best["file_id"], 103)
         self.assertEqual(best["file_name"], "Skyland Architecture - 1K.7z")
+
+    def test_resolve_best_nexus_file_safe_failure(self):
+        """Verifies that resolve_best_nexus_file returns None rather than falling back to unvetted MAIN files."""
+        mod_def = {
+            "key": "TestMod",
+            "name": "Test Mod 1.7.104",
+            "patterns": [r"^Specific_1_7_104_Pattern.*\.7z$"],
+            "exclusions": []
+        }
+        mock_files = [
+            {"file_id": 999, "file_name": "Unrelated_Main_File.7z", "name": "Main File", "category_name": "MAIN", "uploaded_timestamp": 500}
+        ]
+        # Should NOT return the MAIN file when pattern does not match
+        best = resolve_best_nexus_file(mod_def, mock_files)
+        self.assertIsNone(best)
+
+    def test_resolve_best_nexus_file_pinned_id(self):
+        """Verifies that pinned nexus_file_id is strictly prioritized."""
+        mod_def = {
+            "key": "PinnedMod",
+            "name": "Pinned Mod",
+            "nexus_file_id": 4200,
+            "patterns": [r"^SomePattern.*\.7z$"]
+        }
+        mock_files = [
+            {"file_id": 4199, "file_name": "SomePattern_Newer.7z", "name": "Newer", "category_name": "MAIN", "uploaded_timestamp": 200},
+            {"file_id": 4200, "file_name": "SomePattern_Audited.7z", "name": "Audited", "category_name": "MAIN", "uploaded_timestamp": 100}
+        ]
+        best = resolve_best_nexus_file(mod_def, mock_files)
+        self.assertIsNotNone(best)
+        self.assertEqual(best["file_id"], 4200)
+
+    def test_tes4_truncated_subrecord_raises_error(self):
+        """Verifies that parse_tes4_masters raises PluginParseError on truncated subrecords."""
+        # Subrecord specifies 30 bytes, but payload is truncated to only 5 bytes
+        sub_truncated = b"MAST" + struct.pack("<H", 30) + b"Sky"
+        header = b"TES4" + struct.pack("<I", len(sub_truncated)) + (b"\x00" * 16)
+        synth_plugin = header + sub_truncated
+
+        with tempfile.NamedTemporaryFile(suffix=".esp", delete=False) as f:
+            f.write(synth_plugin)
+            temp_path = Path(f.name)
+
+        try:
+            with self.assertRaises(PluginParseError):
+                parse_tes4_masters(temp_path)
+        finally:
+            temp_path.unlink()
+
+    def test_fomod_xml_config_promotion(self):
+        """Verifies that handle_fomod_and_flatten parses ModuleConfig.xml and promotes 1.7.104 folder."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            mod_path = Path(tmp_dir)
+            fomod_dir = mod_path / "fomod"
+            fomod_dir.mkdir(parents=True)
+            xml_content = """<config>
+    <requiredInstallFiles>
+        <folder source="Files_1.7.104" destination="SKSE/Plugins" priority="0"/>
+    </requiredInstallFiles>
+</config>"""
+            (fomod_dir / "ModuleConfig.xml").write_text(xml_content, encoding="utf-8")
+            
+            src_dir = mod_path / "Files_1.7.104"
+            src_dir.mkdir(parents=True)
+            (src_dir / "TestPlugin.dll").write_text("VERIFIED_17104_DLL", encoding="utf-8")
+
+            handle_fomod_and_flatten(mod_path, "1.7.104")
+
+            target_dll = mod_path / "SKSE" / "Plugins" / "TestPlugin.dll"
+            self.assertTrue(target_dll.is_file())
+            self.assertEqual(target_dll.read_text(encoding="utf-8"), "VERIFIED_17104_DLL")
+
+    def test_freeze_and_unfreeze_manifest(self):
+        """Verifies that freeze_steam_manifest preserves mode and unfreeze_steam_manifest restores it."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            steamapps = tmp_path / "steamapps"
+            game_dir = steamapps / "common" / "Skyrim Special Edition"
+            game_dir.mkdir(parents=True)
+            manifest = steamapps / "appmanifest_489830.acf"
+            manifest.write_text('"AppState" { "appid" "489830" }', encoding="utf-8")
+            manifest.chmod(0o644)
+
+            # Freeze
+            self.assertTrue(freeze_steam_manifest(game_dir))
+            self.assertTrue(check_steam_manifest_frozen(game_dir))
+            self.assertTrue((steamapps / "appmanifest_489830.acf.orig_mode").is_file())
+
+            # Unfreeze
+            self.assertTrue(unfreeze_steam_manifest(game_dir))
+            self.assertFalse(check_steam_manifest_frozen(game_dir))
+            self.assertFalse((steamapps / "appmanifest_489830.acf.orig_mode").is_file())
 
 if __name__ == "__main__":
     unittest.main()

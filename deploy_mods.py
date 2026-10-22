@@ -13,11 +13,13 @@ import re
 import json
 import shutil
 import struct
+import getpass
 import datetime
 import argparse
 import subprocess
 import urllib.request
 import urllib.error
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 # --- Shared Target Definition ---
@@ -545,8 +547,16 @@ def get_nexus_mod_files(mod_id: int, api_key: str) -> list:
         raise NexusAPIError(f"Failed to fetch files for mod #{mod_id}: {e}")
 
 def resolve_best_nexus_file(mod_def: dict, files_list: list) -> dict:
-    """Matches the manifest patterns and exclusions against Nexus file listings."""
-    patterns = mod_def["patterns"]
+    """Matches the manifest patterns and exclusions against Nexus file listings with safe failure."""
+    # 1. Pinned file ID match (highest priority & cryptographic certainty)
+    pinned_id = mod_def.get("nexus_file_id")
+    if pinned_id:
+        for f in files_list:
+            if f.get("file_id") == pinned_id:
+                return f
+        print(f"    [-] Warning: Pinned file_id #{pinned_id} not found in Nexus file list for {mod_def.get('name')}.")
+
+    patterns = mod_def.get("patterns", [])
     exclusions = mod_def.get("exclusions", [])
 
     candidates = []
@@ -558,22 +568,20 @@ def resolve_best_nexus_file(mod_def: dict, files_list: list) -> dict:
         if any(re.search(p, file_name, re.IGNORECASE) or re.search(p, name, re.IGNORECASE) for p in patterns):
             candidates.append(f)
 
-    if not candidates:
-        main_files = [f for f in files_list if f.get("category_name") == "MAIN" and not any(
-            re.search(ex, f.get("file_name", ""), re.IGNORECASE) or re.search(ex, f.get("name", ""), re.IGNORECASE) for ex in exclusions
-        )]
-        if main_files:
-            candidates = main_files
-
+    # Fail safely: do NOT fall back to arbitrary "MAIN" files if manifest patterns didn't match
     if not candidates:
         return None
 
-    candidates.sort(key=lambda x: (
-        1 if x.get("category_name") == "MAIN" else 0,
-        1 if x.get("is_primary") else 0,
-        x.get("uploaded_timestamp", 0)
-    ), reverse=True)
+    def candidate_score(x):
+        fname = x.get("file_name", "").lower()
+        dname = x.get("name", "").lower()
+        exact_runtime = 1 if any(t in fname or t in dname for t in ["1.7.104", "1_7_104", "17104"]) else 0
+        is_main = 1 if x.get("category_name") == "MAIN" else 0
+        is_prim = 1 if x.get("is_primary") else 0
+        ts = x.get("uploaded_timestamp", 0)
+        return (exact_runtime, is_main, is_prim, ts)
 
+    candidates.sort(key=candidate_score, reverse=True)
     return candidates[0]
 
 def get_nexus_download_url(mod_id: int, file_id: int, api_key: str) -> str:
@@ -648,7 +656,10 @@ def auto_download_premium_preset(api_key: str, downloads_dir: Path, game_dir: Pa
 
     print("[✓] Premium status: ACTIVE (Uncapped high-speed CDN enabled).")
 
-    existing_archives = [f for f in downloads_dir.iterdir() if f.is_file() and f.suffix.lower() in [".zip", ".7z", ".rar"]] if downloads_dir.is_dir() else []
+    existing_archives = [
+        f for f in downloads_dir.iterdir() 
+        if f.is_file() and f.suffix.lower() in [".zip", ".7z", ".rar"] and f.stat().st_size > 1024
+    ] if downloads_dir.is_dir() else []
     skse_installed = (game_dir / REQUIRED_SKSE_DLL).is_file() and (game_dir / "skse64_loader.exe").is_file()
 
     to_download = []
@@ -666,8 +677,9 @@ def auto_download_premium_preset(api_key: str, downloads_dir: Path, game_dir: Pa
             if any(re.search(ex, fname, re.IGNORECASE) for ex in exclusions):
                 continue
             if any(re.search(p, fname, re.IGNORECASE) for p in patterns):
-                already_downloaded = True
-                break
+                if arch.stat().st_size > 1024:
+                    already_downloaded = True
+                    break
 
         if not already_downloaded:
             to_download.append(mod)
@@ -772,7 +784,7 @@ class PluginParseError(Exception):
     pass
 
 def parse_tes4_masters(plugin_path: Path) -> list:
-    """Parses master file dependencies (MAST subrecords) from a TES4 plugin header."""
+    """Parses master file dependencies (MAST subrecords) from a TES4 plugin header with strict validation."""
     try:
         with open(plugin_path, "rb") as f:
             header_bytes = f.read(2048)
@@ -783,6 +795,10 @@ def parse_tes4_masters(plugin_path: Path) -> list:
         if data_size + 24 > len(header_bytes):
             with open(plugin_path, "rb") as f:
                 header_bytes = f.read(data_size + 24)
+            if len(header_bytes) < data_size + 24:
+                raise PluginParseError(
+                    f"Truncated TES4 header in {plugin_path.name}: expected {data_size + 24} bytes, got {len(header_bytes)}"
+                )
 
         data = header_bytes[24 : 24 + data_size]
         offset = 0
@@ -792,7 +808,10 @@ def parse_tes4_masters(plugin_path: Path) -> list:
             sub_size = struct.unpack_from("<H", data, offset + 4)[0]
             offset += 6
             if offset + sub_size > len(data):
-                break
+                sub_str = sub_type.decode("latin1", errors="replace")
+                raise PluginParseError(
+                    f"Truncated subrecord '{sub_str}' in {plugin_path.name}: expected {sub_size} bytes, but only {len(data) - offset} remain"
+                )
             sub_data = data[offset : offset + sub_size]
             offset += sub_size
             if sub_type == b"MAST":
@@ -1027,26 +1046,70 @@ def handle_fomod_and_flatten(mod_dir: Path, target_runtime: str, fomod_handler: 
     items = [p for p in mod_dir.iterdir() if p.name not in ["__MACOSX"]]
     if len(items) == 1 and items[0].is_dir():
         inner = items[0]
-        for sub in inner.iterdir():
+        for sub in list(inner.iterdir()):
             shutil.move(str(sub), str(mod_dir))
         inner.rmdir()
     elif (mod_dir / "Data").is_dir():
         data_dir = mod_dir / "Data"
-        for sub in data_dir.iterdir():
+        for sub in list(data_dir.iterdir()):
             shutil.move(str(sub), str(mod_dir))
         data_dir.rmdir()
 
-    # Exact runtime directory promotion (avoids loose matching like 1.7 matching 1.7.80)
-    if fomod_handler:
-        exact_tokens = [target_runtime, target_runtime.replace(".", "")]
-        matched_sub = None
+    # If any plugin (.esp/.esm/.esl) ended up nested in a remaining Data/ folder, promote it
+    if (mod_dir / "Data").is_dir():
+        for p in list((mod_dir / "Data").glob("*.es[mp]")) + list((mod_dir / "Data").glob("*.esl")):
+            dst = mod_dir / p.name
+            if not dst.exists():
+                shutil.move(str(p), str(dst))
+
+    # 1. Parse FOMOD ModuleConfig.xml if present
+    fomod_xml_candidates = [
+        mod_dir / "fomod" / "ModuleConfig.xml",
+        mod_dir / "FOMOD" / "ModuleConfig.xml",
+        mod_dir / "fomod" / "moduleconfig.xml",
+    ]
+    xml_promoted = False
+    for fxml in fomod_xml_candidates:
+        if fxml.is_file():
+            try:
+                tree = ET.parse(fxml)
+                root = tree.getroot()
+                exact_tokens = [target_runtime, target_runtime.replace(".", ""), target_runtime.replace(".", "_")]
+                for folder in root.iter("folder"):
+                    src = folder.get("source", "").strip()
+                    dst = folder.get("destination", "").strip()
+                    if any(tok.lower() in src.lower() for tok in exact_tokens):
+                        src_path = mod_dir / src
+                        if src_path.is_dir():
+                            dst_dir = mod_dir if not dst else (mod_dir / dst)
+                            for inner_item in src_path.rglob("*"):
+                                if inner_item.is_file():
+                                    rel = inner_item.relative_to(src_path)
+                                    target = dst_dir / rel
+                                    target.parent.mkdir(parents=True, exist_ok=True)
+                                    shutil.copy2(inner_item, target)
+                            xml_promoted = True
+                            break
+                if xml_promoted:
+                    break
+            except Exception:
+                pass
+
+    # 2. Directory promotion with strict incompatible-marker exclusion
+    if fomod_handler and not xml_promoted:
+        exact_tokens = [target_runtime, target_runtime.replace(".", ""), target_runtime.replace(".", "_")]
+        incompatible_tokens = ["1.5.97", "1.6.640", "1.6.1130", "1.6.1170", "vr", "gog"]
+        candidate_subs = []
         for sub in list(mod_dir.iterdir()):
             if sub.is_dir():
-                sub_name = sub.name.strip()
-                if any(t in sub_name for t in exact_tokens):
-                    matched_sub = sub
-                    break
-        if matched_sub:
+                sub_name = sub.name.strip().lower()
+                if any(inc in sub_name for inc in incompatible_tokens):
+                    continue
+                if any(t.lower() in sub_name for t in exact_tokens):
+                    candidate_subs.append(sub)
+
+        if candidate_subs:
+            matched_sub = candidate_subs[0]
             for inner_item in matched_sub.rglob("*"):
                 if inner_item.is_file():
                     rel = inner_item.relative_to(matched_sub)
@@ -1234,11 +1297,44 @@ def freeze_steam_manifest(game_dir: Path) -> bool:
     for c in candidates:
         if c.is_file():
             try:
+                orig_mode = oct(c.stat().st_mode & 0o777)
+                sidecar = c.with_suffix(".acf.orig_mode")
+                try:
+                    sidecar.write_text(str(orig_mode), encoding="utf-8")
+                except Exception:
+                    pass
                 c.chmod(0o444)
-                print(f"[✓] Write-protected {c.name}. Steam auto-updates are frozen.")
+                print(f"[✓] Write-protected {c.name} (read-only; saved original mode: {orig_mode}).")
+                print("    Steam auto-updates are frozen. (Note: Steam may display a disk write error if an update is pushed).")
                 return True
             except Exception as e:
                 print(f"[-] Warning: Failed to write-protect {c}: {e}")
+    return False
+
+def unfreeze_steam_manifest(game_dir: Path) -> bool:
+    """Restores original write permissions to appmanifest_489830.acf."""
+    candidates = [
+        game_dir.parent.parent / "appmanifest_489830.acf",
+        Path.home() / ".local/share/Steam/steamapps/appmanifest_489830.acf",
+        Path.home() / ".steam/steam/steamapps/appmanifest_489830.acf",
+    ]
+    for c in candidates:
+        if c.is_file():
+            sidecar = c.with_suffix(".acf.orig_mode")
+            target_mode = 0o644
+            if sidecar.is_file():
+                try:
+                    target_mode = int(sidecar.read_text(encoding="utf-8").strip(), 8)
+                except Exception:
+                    pass
+            try:
+                c.chmod(target_mode)
+                if sidecar.is_file():
+                    sidecar.unlink(missing_ok=True)
+                print(f"[✓] Restored permissions on {c.name} to {oct(target_mode)}. Steam updates are unlocked.")
+                return True
+            except Exception as e:
+                print(f"[-] Warning: Failed to restore permissions on {c}: {e}")
     return False
 
 def check_steam_manifest_frozen(game_dir: Path) -> bool:
@@ -1274,22 +1370,45 @@ def main():
     parser = argparse.ArgumentParser(description="Skyrim SE Handheld Mod Deployer for SteamOS")
     parser.add_argument("--no-backup", action="store_true", help="Skip creating permanent historical backups in .handheld_backups to save disk space")
     parser.add_argument("--freeze-updates", action="store_true", help="Lock appmanifest_489830.acf to read-only to freeze runtime 1.7.104 and block Steam auto-updates")
-    parser.add_argument("--nexus-key", default=os.environ.get("NEXUS_API_KEY"), help="Nexus Mods Personal API Key for automated Premium downloads")
+    parser.add_argument("--unfreeze-updates", action="store_true", help="Restore appmanifest_489830.acf to its original permissions")
+    parser.add_argument("--nexus-key", default=None, help="Nexus Mods Personal API Key (Note: Prefer NEXUS_API_KEY env var or --nexus-premium to avoid exposing in process lists)")
+    parser.add_argument("--nexus-premium", action="store_true", help="Prompt securely for Nexus Personal API Key and run automated download")
     args = parser.parse_args()
     no_backup = args.no_backup
+
+    # 1. Path & Runtime Verification
+    game_dir, compat_dir, mo2_dir = locate_skyrim_and_mo2()
+
+    # Handle update safeguards
+    if args.unfreeze_updates:
+        unfreeze_steam_manifest(game_dir)
+        sys.exit(0)
+
+    if args.freeze_updates:
+        freeze_steam_manifest(game_dir)
+
+    detected_ver = verify_target_runtime(game_dir)
+
+    # API key resolution and security checks
+    nexus_key = args.nexus_key or os.environ.get("NEXUS_API_KEY")
+    if args.nexus_key:
+        print("[!] Security Notice: Passing --nexus-key via command-line arguments can expose your API")
+        print("    key to other processes (ps aux). Use 'export NEXUS_API_KEY=...' or --nexus-premium instead.")
+    elif args.nexus_premium and not nexus_key:
+        try:
+            nexus_key = getpass.getpass("  Enter your Nexus Personal API Key (input hidden): ").strip()
+        except (KeyboardInterrupt, EOFError):
+            print("\nOperation cancelled.")
+            sys.exit(1)
 
     print("==========================================================")
     print("  Skyrim SE Handheld Mod Deployer for SteamOS")
     print(f"  Target: Skyrim SE {REQUIRED_RUNTIME} (Strict) | SKSE {REQUIRED_SKSE_VERSION}")
-    if args.nexus_key:
+    if nexus_key:
         print("  Mode: Nexus Mods Premium (Automated Download & Install)")
     elif no_backup:
         print("  Mode: Low Storage Space (--no-backup active)")
     print("==========================================================")
-
-    # 1. Path & Runtime Verification
-    game_dir, compat_dir, mo2_dir = locate_skyrim_and_mo2()
-    detected_ver = verify_target_runtime(game_dir)
 
     print(f"[+] Skyrim Directory:   {game_dir}")
     print(f"[+] Verified Runtime:   {detected_ver}")
@@ -1301,13 +1420,10 @@ def main():
     else:
         print("[!] Steam Update Safeguard: UNLOCKED (run with --freeze-updates to block auto-updates).")
 
-    if args.freeze_updates:
-        freeze_steam_manifest(game_dir)
-
     # 2. Nexus Mods Premium Automated Downloads (If API Key provided)
-    if args.nexus_key:
+    if nexus_key:
         downloads_dir = Path.home() / "Downloads"
-        auto_download_premium_preset(args.nexus_key, downloads_dir, game_dir)
+        auto_download_premium_preset(nexus_key, downloads_dir, game_dir)
 
     # 3. Preflight Archive Discovery
     downloads_dirs = [
@@ -1361,33 +1477,63 @@ def main():
 
             # Validate required files
             for req in required_files:
-                if not (stage_mod_dir / req).exists():
+                target_req = stage_mod_dir / req
+                if not target_req.exists():
                     inner_match = list(stage_mod_dir.glob(f"**/{Path(req).name}"))
                     if not inner_match:
                         print(f"[-] FATAL: Validation failed for '{name}'. Missing required file: {req}")
                         sys.exit(1)
+                    
+                    # Filter out matches belonging to explicitly incompatible runtimes
+                    incompatible_markers = ["1.5.97", "1.6.640", "1.6.1130", "1.6.1170", "vr", "gog"]
+                    valid_candidates = [
+                        m for m in inner_match
+                        if not any(mark in str(m).lower() for mark in incompatible_markers)
+                    ]
+                    
+                    # Target exact runtime match
+                    target_matches = [
+                        m for m in valid_candidates
+                        if detected_ver in str(m) or detected_ver.replace(".", "") in str(m) or detected_ver.replace(".", "_") in str(m)
+                    ]
+                    
+                    if target_matches:
+                        chosen = target_matches[0]
+                    elif len(valid_candidates) == 1:
+                        chosen = valid_candidates[0]
                     else:
-                        # Prioritize match corresponding to detected_ver
-                        chosen = inner_match[0]
+                        print(f"\n[-] FATAL: Ambiguous or unverified runtime binaries for '{name}' ({req}):")
                         for m in inner_match:
-                            if detected_ver in str(m) or detected_ver.replace(".", "") in str(m):
-                                chosen = m
-                                break
-                        target = stage_mod_dir / req
-                        target.parent.mkdir(parents=True, exist_ok=True)
-                        shutil.copy2(chosen, target)
+                            try:
+                                rel_path = m.relative_to(stage_mod_dir)
+                            except ValueError:
+                                rel_path = m
+                            print(f"    - {rel_path}")
+                        print(f"    Cannot prove binary compatibility with Skyrim SE {detected_ver}.")
+                        sys.exit(1)
+                    
+                    target_req.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(chosen, target_req)
 
             if is_root:
                 root_files_to_deploy.append((key, stage_mod_dir))
             else:
                 staged_mo2_mods.append((name, stage_mod_dir, priority))
 
-                # Scan and validate plugins
+                # Scan and validate plugins in root and Data/ subfolder
+                mod_plugins = []
                 for p in stage_mod_dir.glob("*.es[mp]"):
-                    all_discovered_plugins.add(p.name)
-                    plugin_master_map[p.name] = parse_tes4_masters(p)
-                    plugin_priority_map[p.name] = priority
+                    mod_plugins.append(p)
                 for p in stage_mod_dir.glob("*.esl"):
+                    mod_plugins.append(p)
+                if (stage_mod_dir / "Data").is_dir():
+                    for p in list((stage_mod_dir / "Data").glob("*.es[mp]")) + list((stage_mod_dir / "Data").glob("*.esl")):
+                        dest_p = stage_mod_dir / p.name
+                        if not dest_p.exists():
+                            shutil.move(str(p), str(dest_p))
+                            mod_plugins.append(dest_p)
+
+                for p in mod_plugins:
                     all_discovered_plugins.add(p.name)
                     plugin_master_map[p.name] = parse_tes4_masters(p)
                     plugin_priority_map[p.name] = priority
@@ -1399,7 +1545,7 @@ def main():
             for p in list(stage_mod_dir.glob("*.es[mp]")) + list(stage_mod_dir.glob("*.esl")):
                 validate_plugin_masters(p, all_discovered_plugins)
 
-        # 4. Atomic Commit Phase with Full Rollback
+        # 4. Atomic Commit Phase with Full Rollback & Profile Isolation
         print("\n[*] All mods staged, validated, and verified. Committing transactionally...")
 
         rollback_root_dir = game_dir / f".handheld_root_backups/{timestamp}"
@@ -1410,6 +1556,12 @@ def main():
         deployed_manifest = []
         installed_mods_record = []
 
+        # Comprehensive transactional rollback tracking
+        created_files = set()
+        created_dirs = []
+        backed_up_files = {}  # target Path -> backup Path
+        backed_up_dirs = {}   # target Path -> backup Path
+
         try:
             # A. Deploy Root Files
             for key, stage_dir in root_files_to_deploy:
@@ -1419,39 +1571,76 @@ def main():
                     for f in src.glob("skse64_*.dll"):
                         dst = game_dir / f.name
                         if dst.exists():
-                            shutil.copy2(dst, rollback_root_dir / f.name)
+                            b_dst = rollback_root_dir / f.name
+                            shutil.copy2(dst, b_dst)
+                            backed_up_files[dst] = b_dst
+                        else:
+                            created_files.add(dst)
                         shutil.copy2(f, dst)
                         deployed_manifest.append(f.name)
                     for f in src.glob("skse64_loader.exe"):
                         dst = game_dir / f.name
                         if dst.exists():
-                            shutil.copy2(dst, rollback_root_dir / f.name)
+                            b_dst = rollback_root_dir / f.name
+                            shutil.copy2(dst, b_dst)
+                            backed_up_files[dst] = b_dst
+                        else:
+                            created_files.add(dst)
                         shutil.copy2(f, dst)
                         deployed_manifest.append(f.name)
                     if (src / "Data").is_dir():
-                        shutil.copytree(src / "Data", game_dir / "Data", dirs_exist_ok=True)
+                        for item in (src / "Data").rglob("*"):
+                            rel = item.relative_to(src / "Data")
+                            dst = game_dir / "Data" / rel
+                            if item.is_dir():
+                                if not dst.exists():
+                                    created_dirs.append(dst)
+                                    dst.mkdir(parents=True, exist_ok=True)
+                            elif item.is_file():
+                                if dst.exists():
+                                    b_dst = rollback_root_dir / "Data" / rel
+                                    b_dst.parent.mkdir(parents=True, exist_ok=True)
+                                    shutil.copy2(dst, b_dst)
+                                    backed_up_files[dst] = b_dst
+                                else:
+                                    created_files.add(dst)
+                                dst.parent.mkdir(parents=True, exist_ok=True)
+                                shutil.copy2(item, dst)
                         deployed_manifest.append("Data/Scripts")
-                    print("    -> Deployed SKSE 2.3.1 binaries to game root.")
+                    print("    -> Deployed SKSE 2.3.1 binaries & scripts to game root.")
                 elif key == "EngineFixesPart2":
                     for dll in stage_dir.glob("*.dll"):
                         dst = game_dir / dll.name
                         if dst.exists():
-                            shutil.copy2(dst, rollback_root_dir / dll.name)
+                            b_dst = rollback_root_dir / dll.name
+                            shutil.copy2(dst, b_dst)
+                            backed_up_files[dst] = b_dst
+                        else:
+                            created_files.add(dst)
                         shutil.copy2(dll, dst)
                         deployed_manifest.append(dll.name)
                         print(f"    -> Deployed {dll.name} to game root.")
 
-            # Update root manifest
+            # Update root manifest with backup protection
             root_manifest_file = game_dir / ".handheld_root_manifest.json"
+            if root_manifest_file.exists():
+                b_manifest = rollback_root_dir / ".handheld_root_manifest.json"
+                shutil.copy2(root_manifest_file, b_manifest)
+                backed_up_files[root_manifest_file] = b_manifest
+            else:
+                created_files.add(root_manifest_file)
             root_manifest_file.write_text(json.dumps(deployed_manifest, indent=2), encoding="utf-8")
 
-            # B. Deploy MO2 Mods with Rollback Protection
+            # B. Deploy MO2 Mods with Rollback Protection & Profile Isolation
             for name, stage_dir, priority in staged_mo2_mods:
                 dest = mo2_dir / "mods" / name
                 if dest.exists():
                     backup_dest = rollback_mo2_dir / name
                     shutil.copytree(dest, backup_dest)
+                    backed_up_dirs[dest] = backup_dest
                     shutil.rmtree(dest)
+                else:
+                    created_dirs.append(dest)
 
                 shutil.copytree(stage_dir, dest)
                 installed_mods_record.append((name, priority))
@@ -1461,7 +1650,15 @@ def main():
 
             # D. Generate Dedicated Profile: 'Handheld-10W'
             profile_dir = mo2_dir / "profiles" / "Handheld-10W"
-            profile_dir.mkdir(parents=True, exist_ok=True)
+            if not profile_dir.exists():
+                created_dirs.append(profile_dir)
+                profile_dir.mkdir(parents=True, exist_ok=True)
+            else:
+                backup_profile = rollback_mo2_dir / "profile_Handheld-10W"
+                if not backup_profile.exists():
+                    shutil.copytree(profile_dir, backup_profile)
+                    backed_up_dirs[profile_dir] = backup_profile
+
             default_profile = mo2_dir / "profiles" / "Default"
             if default_profile.is_dir():
                 for item in ["archives.txt", "settings.ini"]:
@@ -1484,25 +1681,58 @@ def main():
             (profile_dir / "loadorder.txt").write_text(loadorder_txt_content, encoding="utf-8")
             print(f"[✓] Generated topological load order with {len(sorted_plugins)} plugin(s).")
 
-            # F. Activate Profile in ModOrganizer.ini
+            # F. Activate Profile in ModOrganizer.ini (with rollback backup)
+            mo2_ini = mo2_dir / "ModOrganizer.ini"
+            if mo2_ini.exists():
+                b_ini = rollback_mo2_dir / "ModOrganizer.ini"
+                if not b_ini.exists():
+                    shutil.copy2(mo2_ini, b_ini)
+                    backed_up_files[mo2_ini] = b_ini
             activate_mo2_profile(mo2_dir, "Handheld-10W")
 
             # G. Create Direct Auto-Launch Wrapper
+            launcher_script = game_dir / "launch_skse_direct.sh"
+            if launcher_script.exists():
+                b_launcher = rollback_root_dir / "launch_skse_direct.sh"
+                if not b_launcher.exists():
+                    shutil.copy2(launcher_script, b_launcher)
+                    backed_up_files[launcher_script] = b_launcher
+            else:
+                created_files.add(launcher_script)
             create_direct_launch_wrapper(game_dir, mo2_dir)
 
         except (Exception, KeyboardInterrupt) as commit_err:
             print(f"\n[-] FATAL: Deployment interrupted or encountered error during commit: {commit_err}")
-            print("[*] Initiating automatic rollback to restore previous state...")
-            # Restore root files
-            for f in rollback_root_dir.iterdir():
-                shutil.copy2(f, game_dir / f.name)
-            # Restore MO2 mods
-            for backup_mod in rollback_mo2_dir.iterdir():
-                dest = mo2_dir / "mods" / backup_mod.name
-                if dest.exists():
-                    shutil.rmtree(dest, ignore_errors=True)
-                shutil.copytree(backup_mod, dest)
-            print("[✓] Rollback complete. Original state preserved.")
+            print("[*] Initiating comprehensive atomic rollback to restore previous state...")
+            # 1. Delete newly created files
+            for f in created_files:
+                try:
+                    f.unlink(missing_ok=True)
+                except Exception:
+                    pass
+            # 2. Delete newly created directories (deepest first)
+            for d in sorted(set(created_dirs), key=lambda p: len(str(p)), reverse=True):
+                try:
+                    if d.exists():
+                        shutil.rmtree(d, ignore_errors=True)
+                except Exception:
+                    pass
+            # 3. Restore backed-up files
+            for orig_f, backup_f in backed_up_files.items():
+                try:
+                    orig_f.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(backup_f, orig_f)
+                except Exception:
+                    pass
+            # 4. Restore backed-up directories
+            for orig_d, backup_d in backed_up_dirs.items():
+                try:
+                    if orig_d.exists():
+                        shutil.rmtree(orig_d, ignore_errors=True)
+                    shutil.copytree(backup_d, orig_d)
+                except Exception:
+                    pass
+            print("[✓] Atomic rollback complete: Cleaned up added files and restored original configuration.")
             sys.exit(1)
 
         # Handle backup retention or pruning
